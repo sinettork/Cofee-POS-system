@@ -1,0 +1,1023 @@
+import path from 'node:path'
+import { createHash } from 'node:crypto'
+import { DatabaseSync } from 'node:sqlite'
+import { CATEGORY_SEED, ORDER_SEED, PRODUCT_SEED, TABLE_SEED } from './data.js'
+
+const DB_PATH = path.resolve(process.cwd(), 'server', 'pos.sqlite')
+
+export const db = new DatabaseSync(DB_PATH)
+
+const ORDER_STATUSES = new Set(['Active', 'Closed', 'Done', 'Canceled'])
+const PAYMENT_STATUSES = new Set(['Paid', 'Unpaid'])
+const ORDER_TRANSITIONS = {
+  Active: new Set(['Active', 'Closed', 'Done', 'Canceled']),
+  Closed: new Set(['Closed', 'Done', 'Canceled']),
+  Done: new Set(['Done']),
+  Canceled: new Set(['Canceled']),
+}
+const AUTH_PEPPER = process.env.POS_AUTH_PEPPER || 'tenant-pos-auth-pepper'
+const DEFAULT_USERS = [
+  { username: 'admin', displayName: 'System Admin', role: 'admin', password: 'admin123' },
+  { username: 'manager', displayName: 'Store Manager', role: 'manager', password: 'manager123' },
+  { username: 'cashier', displayName: 'Front Cashier', role: 'cashier', password: 'cashier123' },
+]
+
+db.exec(`
+  PRAGMA journal_mode = WAL;
+  PRAGMA foreign_keys = ON;
+
+  CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    base_price REAL NOT NULL,
+    stock_qty REAL NOT NULL DEFAULT 50,
+    stock_threshold REAL NOT NULL DEFAULT 10,
+    image TEXT NOT NULL,
+    description TEXT NOT NULL,
+    customizable INTEGER NOT NULL DEFAULT 0,
+    options_json TEXT,
+    FOREIGN KEY(category_id) REFERENCES categories(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS dining_tables (
+    id TEXT PRIMARY KEY,
+    group_title TEXT NOT NULL,
+    guest_name TEXT NOT NULL,
+    pax INTEGER NOT NULL DEFAULT 0,
+    time_label TEXT NOT NULL,
+    status TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_number TEXT NOT NULL UNIQUE,
+    customer_name TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    order_type TEXT NOT NULL,
+    payment_method TEXT NOT NULL DEFAULT 'Cash',
+    currency TEXT NOT NULL DEFAULT 'USD',
+    payment_currency TEXT NOT NULL DEFAULT '',
+    amount_received REAL NOT NULL DEFAULT 0,
+    change_amount REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    payment_status TEXT NOT NULL,
+    kitchen_status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    subtotal REAL NOT NULL DEFAULT 0,
+    tax REAL NOT NULL DEFAULT 0,
+    discount REAL NOT NULL DEFAULT 0,
+    total REAL NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL,
+    product_id TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price REAL NOT NULL,
+    total_price REAL NOT NULL,
+    options_json TEXT,
+    notes TEXT,
+    FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS inventory_movements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id TEXT NOT NULL,
+    order_id INTEGER,
+    movement_type TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    before_qty REAL NOT NULL,
+    after_qty REAL NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(product_id) REFERENCES products(id),
+    FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE SET NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_inventory_movements_product_id
+    ON inventory_movements(product_id);
+
+  CREATE INDEX IF NOT EXISTS idx_inventory_movements_created_at
+    ON inventory_movements(created_at);
+
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    password_digest TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_users_role
+    ON users(role);
+`)
+
+ensureOrderColumns()
+ensureProductColumns()
+seedIfEmpty()
+ensureOpeningInventoryMovements()
+ensureDefaultUsers()
+
+function seedIfEmpty() {
+  const categoryCount = db.prepare('SELECT COUNT(*) AS count FROM categories').get().count
+  if (categoryCount > 0) {
+    ensureCatalogSeedExists()
+    return
+  }
+
+  const insertCategory = db.prepare('INSERT INTO categories (id, name) VALUES (?, ?)')
+  CATEGORY_SEED.forEach((item) => {
+    insertCategory.run(item.id, item.name)
+  })
+
+  const insertProduct = db.prepare(`
+    INSERT INTO products (
+      id, name, category_id, label, base_price, stock_qty, stock_threshold,
+      image, description, customizable, options_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  PRODUCT_SEED.forEach((item) => {
+    insertProduct.run(
+      item.id,
+      item.name,
+      item.category,
+      item.label,
+      item.basePrice,
+      Number.isFinite(Number(item.stockQty)) ? Number(item.stockQty) : 50,
+      Number.isFinite(Number(item.stockThreshold)) ? Number(item.stockThreshold) : 10,
+      item.image,
+      item.description,
+      item.customizable,
+      item.options ? JSON.stringify(item.options) : null,
+    )
+  })
+
+  const insertTable = db.prepare(`
+    INSERT INTO dining_tables (id, group_title, guest_name, pax, time_label, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `)
+  TABLE_SEED.forEach((item) => {
+    insertTable.run(item.id, item.groupTitle, item.guest, item.pax, item.time, item.status)
+  })
+
+  const insertOrder = db.prepare(`
+    INSERT INTO orders (
+      order_number, customer_name, table_name, order_type, payment_method, currency, payment_currency,
+      amount_received, change_amount, status, payment_status, kitchen_status, created_at,
+      subtotal, tax, discount, total
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const insertOrderItem = db.prepare(`
+    INSERT INTO order_items (
+      order_id, product_id, product_name, quantity, unit_price, total_price, options_json, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const findProductName = db.prepare('SELECT name FROM products WHERE id = ?')
+
+  ORDER_SEED.forEach((order) => {
+    const result = insertOrder.run(
+      order.orderNumber,
+      order.customerName,
+      order.tableName,
+      order.orderType,
+      order.paymentMethod ?? 'Cash',
+      order.currency ?? 'USD',
+      order.paymentCurrency ?? order.currency ?? 'USD',
+      order.amountReceived ?? order.total ?? 0,
+      order.changeAmount ?? 0,
+      order.status,
+      order.paymentStatus,
+      order.kitchenStatus,
+      order.createdAt,
+      order.subtotal,
+      order.tax,
+      0,
+      order.total,
+    )
+
+    order.items.forEach((item) => {
+      const product = findProductName.get(item.productId)
+      insertOrderItem.run(
+        Number(result.lastInsertRowid),
+        item.productId,
+        product?.name ?? item.productId,
+        item.quantity,
+        item.unitPrice,
+        item.totalPrice,
+        null,
+        '',
+      )
+    })
+  })
+}
+
+function ensureOrderColumns() {
+  const columns = db.prepare('PRAGMA table_info(orders)').all()
+  const hasPaymentMethod = columns.some((column) => column.name === 'payment_method')
+  const hasCurrency = columns.some((column) => column.name === 'currency')
+  const hasPaymentCurrency = columns.some((column) => column.name === 'payment_currency')
+  const hasAmountReceived = columns.some((column) => column.name === 'amount_received')
+  const hasChangeAmount = columns.some((column) => column.name === 'change_amount')
+  if (!hasPaymentMethod) {
+    db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'Cash'")
+  }
+  if (!hasCurrency) {
+    db.exec("ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'USD'")
+  }
+  if (!hasPaymentCurrency) {
+    db.exec("ALTER TABLE orders ADD COLUMN payment_currency TEXT NOT NULL DEFAULT ''")
+  }
+  if (!hasAmountReceived) {
+    db.exec('ALTER TABLE orders ADD COLUMN amount_received REAL NOT NULL DEFAULT 0')
+  }
+  if (!hasChangeAmount) {
+    db.exec('ALTER TABLE orders ADD COLUMN change_amount REAL NOT NULL DEFAULT 0')
+  }
+  db.exec("UPDATE orders SET payment_currency = currency WHERE payment_currency IS NULL OR payment_currency = ''")
+}
+
+function ensureProductColumns() {
+  const columns = db.prepare('PRAGMA table_info(products)').all()
+  const hasStockQty = columns.some((column) => column.name === 'stock_qty')
+  const hasStockThreshold = columns.some((column) => column.name === 'stock_threshold')
+  if (!hasStockQty) {
+    db.exec('ALTER TABLE products ADD COLUMN stock_qty REAL NOT NULL DEFAULT 50')
+  }
+  if (!hasStockThreshold) {
+    db.exec('ALTER TABLE products ADD COLUMN stock_threshold REAL NOT NULL DEFAULT 10')
+  }
+}
+
+function ensureCatalogSeedExists() {
+  const insertCategory = db.prepare('INSERT OR IGNORE INTO categories (id, name) VALUES (?, ?)')
+  CATEGORY_SEED.forEach((item) => {
+    insertCategory.run(item.id, item.name)
+  })
+
+  const insertProduct = db.prepare(`
+    INSERT OR IGNORE INTO products (
+      id, name, category_id, label, base_price, stock_qty, stock_threshold,
+      image, description, customizable, options_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  PRODUCT_SEED.forEach((item) => {
+    insertProduct.run(
+      item.id,
+      item.name,
+      item.category,
+      item.label,
+      item.basePrice,
+      Number.isFinite(Number(item.stockQty)) ? Number(item.stockQty) : 50,
+      Number.isFinite(Number(item.stockThreshold)) ? Number(item.stockThreshold) : 10,
+      item.image,
+      item.description,
+      item.customizable,
+      item.options ? JSON.stringify(item.options) : null,
+    )
+  })
+}
+
+function ensureOpeningInventoryMovements() {
+  const movementCount = Number(
+    db.prepare('SELECT COUNT(*) AS count FROM inventory_movements').get()?.count ?? 0,
+  )
+  if (movementCount > 0) return
+  const products = db
+    .prepare(
+      `
+      SELECT id, name, stock_qty
+      FROM products
+      ORDER BY id
+    `,
+    )
+    .all()
+  if (products.length === 0) return
+  const insertMovement = db.prepare(`
+    INSERT INTO inventory_movements (
+      product_id, order_id, movement_type, quantity, before_qty, after_qty, note, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const now = new Date().toISOString()
+  products.forEach((product) => {
+    const qty = Number(product.stock_qty ?? 0)
+    insertMovement.run(
+      product.id,
+      null,
+      'opening',
+      qty,
+      0,
+      qty,
+      `Opening stock balance (${product.name ?? product.id})`,
+      now,
+    )
+  })
+}
+
+function mapProductRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    label: row.label,
+    basePrice: row.basePrice,
+    stockQty: Number(row.stockQty ?? 0),
+    stockThreshold: Number(row.stockThreshold ?? 0),
+    image: row.image,
+    description: row.description,
+    customizable: Boolean(row.customizable),
+    options: row.options_json ? JSON.parse(row.options_json) : undefined,
+  }
+}
+
+function mapInventoryMovementRow(row) {
+  return {
+    id: Number(row.id),
+    productId: row.product_id,
+    productName: row.product_name ?? row.product_id,
+    orderId: row.order_id == null ? null : Number(row.order_id),
+    orderNumber: row.order_number ?? null,
+    movementType: String(row.movement_type ?? 'adjustment'),
+    quantity: Number(row.quantity ?? 0),
+    beforeQty: Number(row.before_qty ?? 0),
+    afterQty: Number(row.after_qty ?? 0),
+    note: row.note ?? '',
+    createdAt: row.created_at,
+  }
+}
+
+function mapUserRow(row) {
+  if (!row) return null
+  return {
+    id: Number(row.id),
+    username: row.username,
+    displayName: row.display_name,
+    role: row.role,
+    active: Boolean(row.active),
+  }
+}
+
+export function getProductCatalog() {
+  const categories = db
+    .prepare(
+      `
+      SELECT id, name
+      FROM categories
+      WHERE id != 'all'
+      ORDER BY id
+    `,
+    )
+    .all()
+
+  const products = db
+    .prepare(
+      `
+      SELECT
+        id, name, category_id AS category, label, base_price AS basePrice,
+        stock_qty AS stockQty, stock_threshold AS stockThreshold,
+        image, description, customizable, options_json
+      FROM products
+      ORDER BY name
+    `,
+    )
+    .all()
+    .map((row) => mapProductRow(row))
+
+  return { categories, products }
+}
+
+export function getProductById(productId) {
+  const row = db
+    .prepare(
+      `
+      SELECT
+        id, name, category_id AS category, label, base_price AS basePrice,
+        stock_qty AS stockQty, stock_threshold AS stockThreshold,
+        image, description, customizable, options_json
+      FROM products
+      WHERE id = ?
+    `,
+    )
+    .get(productId)
+  if (!row) return null
+  return mapProductRow(row)
+}
+
+export function getInventoryMovements(limit = 80) {
+  const safeLimit = Number.isFinite(Number(limit))
+    ? Math.min(300, Math.max(1, Math.floor(Number(limit))))
+    : 80
+  return db
+    .prepare(
+      `
+      SELECT
+        im.id,
+        im.product_id,
+        p.name AS product_name,
+        im.order_id,
+        o.order_number,
+        im.movement_type,
+        im.quantity,
+        im.before_qty,
+        im.after_qty,
+        im.note,
+        im.created_at
+      FROM inventory_movements im
+      LEFT JOIN products p ON p.id = im.product_id
+      LEFT JOIN orders o ON o.id = im.order_id
+      ORDER BY datetime(im.created_at) DESC, im.id DESC
+      LIMIT ?
+    `,
+    )
+    .all(safeLimit)
+    .map((row) => mapInventoryMovementRow(row))
+}
+
+export function getUserByUsername(username) {
+  const normalized = String(username ?? '').trim().toLowerCase()
+  if (!normalized) return null
+  const row = db
+    .prepare(
+      `
+      SELECT id, username, display_name, role, active
+      FROM users
+      WHERE LOWER(username) = ?
+      LIMIT 1
+    `,
+    )
+    .get(normalized)
+  return mapUserRow(row)
+}
+
+export function verifyUserCredentials(username, password) {
+  const normalized = String(username ?? '').trim().toLowerCase()
+  if (!normalized) return null
+  const row = db
+    .prepare(
+      `
+      SELECT id, username, display_name, role, active, password_digest
+      FROM users
+      WHERE LOWER(username) = ?
+      LIMIT 1
+    `,
+    )
+    .get(normalized)
+  if (!row || !row.active) return null
+  const digest = hashPassword(password, row.username)
+  if (digest !== row.password_digest) return null
+  return mapUserRow(row)
+}
+
+export function createProduct(payload) {
+  const nextId =
+    String(payload.id ?? '').trim() ||
+    `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+
+  db.prepare(
+    `
+    INSERT INTO products (
+      id, name, category_id, label, base_price, stock_qty, stock_threshold,
+      image, description, customizable, options_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+  ).run(
+    nextId,
+    payload.name,
+    payload.category,
+    payload.label,
+    payload.basePrice,
+    payload.stockQty ?? 50,
+    payload.stockThreshold ?? 10,
+    payload.image,
+    payload.description,
+    payload.customizable ? 1 : 0,
+    payload.options ? JSON.stringify(payload.options) : null,
+  )
+
+  return getProductById(nextId)
+}
+
+export function updateProduct(productId, payload) {
+  const existing = db.prepare('SELECT id, stock_qty, name FROM products WHERE id = ?').get(productId)
+  if (!existing) return false
+
+  const nextStockQty = Number(payload.stockQty ?? 50)
+  const beforeQty = Number(existing.stock_qty ?? 0)
+  const stockDiff = nextStockQty - beforeQty
+  const insertMovement = db.prepare(`
+    INSERT INTO inventory_movements (
+      product_id, order_id, movement_type, quantity, before_qty, after_qty, note, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  db.exec('BEGIN IMMEDIATE TRANSACTION')
+  try {
+    const result = db
+      .prepare(
+        `
+        UPDATE products
+        SET
+          name = ?,
+          category_id = ?,
+          label = ?,
+          base_price = ?,
+          stock_qty = ?,
+          stock_threshold = ?,
+          image = ?,
+          description = ?,
+          customizable = ?,
+          options_json = ?
+        WHERE id = ?
+      `,
+      )
+      .run(
+        payload.name,
+        payload.category,
+        payload.label,
+        payload.basePrice,
+        nextStockQty,
+        payload.stockThreshold ?? 10,
+        payload.image,
+        payload.description,
+        payload.customizable ? 1 : 0,
+        payload.options ? JSON.stringify(payload.options) : null,
+        productId,
+      )
+    if (result.changes > 0 && Math.abs(stockDiff) > 0.000001) {
+      insertMovement.run(
+        productId,
+        null,
+        'adjustment',
+        stockDiff,
+        beforeQty,
+        nextStockQty,
+        String(payload.stockNote ?? `Manual stock adjustment (${existing.name ?? productId})`),
+        new Date().toISOString(),
+      )
+    }
+    db.exec('COMMIT')
+    return result.changes > 0
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export function deleteProduct(productId) {
+  const result = db.prepare('DELETE FROM products WHERE id = ?').run(productId)
+  return result.changes > 0
+}
+
+export function getBootstrapData() {
+  const products = db
+    .prepare(`
+      SELECT
+        id, name, category_id AS category, label, base_price AS basePrice,
+        stock_qty AS stockQty, stock_threshold AS stockThreshold,
+        image, description, customizable, options_json
+      FROM products
+      ORDER BY id
+    `)
+    .all()
+    .map((row) => mapProductRow(row))
+
+  const categories = db
+    .prepare(`
+      SELECT c.id, c.name, COUNT(p.id) AS count
+      FROM categories c
+      LEFT JOIN products p ON p.category_id = c.id
+      GROUP BY c.id, c.name
+      ORDER BY c.id
+    `)
+    .all()
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      count: row.id === 'all' ? products.length : Number(row.count),
+    }))
+
+  const billingQueue = db
+    .prepare(`
+      SELECT order_number AS "order", customer_name AS customer, table_name AS "table",
+             subtotal AS amount, LOWER(status) AS status, created_at, payment_method, currency,
+             payment_currency, amount_received, change_amount
+      FROM orders
+      WHERE status IN ('Active', 'Closed')
+      ORDER BY datetime(created_at) DESC
+      LIMIT 20
+    `)
+    .all()
+    .map((row, index) => ({
+      id: `q${index + 1}`,
+      customer: row.customer,
+      order: row.order,
+      table: row.table,
+      amount: Number(row.amount.toFixed(2)),
+      status: row.status,
+      time: formatClock(new Date(row.created_at)),
+      paymentMethod: row.payment_method,
+      currency: row.currency,
+      paymentCurrency: row.payment_currency || row.currency,
+      amountReceived: Number(row.amount_received ?? 0),
+      changeAmount: Number(row.change_amount ?? 0),
+    }))
+
+  const trackingOrders = db
+    .prepare(`
+      SELECT order_number, customer_name, kitchen_status, table_name, order_type, created_at,
+             payment_method, currency, payment_currency, amount_received, change_amount
+      FROM orders
+      WHERE status IN ('Active', 'Closed')
+      ORDER BY datetime(created_at) DESC
+      LIMIT 8
+    `)
+    .all()
+    .map((row) => ({
+      id: row.order_number.replace('#', 't'),
+      name: row.customer_name,
+      status: row.kitchen_status,
+      table: row.table_name,
+      type: row.order_type,
+      time: formatClock(new Date(row.created_at)),
+      paymentMethod: row.payment_method,
+      currency: row.currency,
+      paymentCurrency: row.payment_currency || row.currency,
+      amountReceived: Number(row.amount_received ?? 0),
+      changeAmount: Number(row.change_amount ?? 0),
+    }))
+
+  const tableRows = db
+    .prepare(
+      `SELECT id, group_title AS groupTitle, guest_name AS guest, pax, time_label AS time, status
+       FROM dining_tables
+       ORDER BY id`,
+    )
+    .all()
+  const tableMap = new Map()
+  tableRows.forEach((row) => {
+    if (!tableMap.has(row.groupTitle)) {
+      tableMap.set(row.groupTitle, [])
+    }
+    tableMap.get(row.groupTitle).push({
+      id: row.id,
+      guest: row.guest,
+      pax: row.pax,
+      time: row.time,
+      status: row.status,
+    })
+  })
+  const tableGroups = Array.from(tableMap.entries()).map(([title, tables]) => ({ title, tables }))
+
+  const historyRows = db
+    .prepare(`
+      SELECT order_number, created_at, customer_name, status, subtotal, payment_status, currency
+      FROM orders
+      WHERE status IN ('Done', 'Canceled')
+      ORDER BY datetime(created_at) DESC
+      LIMIT 60
+    `)
+    .all()
+    .map((row) => ({
+      id: row.order_number.replace('#', ''),
+      at: formatLegacyDate(new Date(row.created_at)),
+      customer: row.customer_name,
+      status: row.status,
+      payment: Number(row.subtotal.toFixed(2)),
+      paid: row.payment_status === 'Paid',
+      currency: row.currency,
+    }))
+
+  const reportOrderRows = db
+    .prepare(`
+      SELECT order_number, created_at, customer_name, status, subtotal, payment_status, currency,
+             payment_method, payment_currency, amount_received, change_amount
+      FROM orders
+      ORDER BY datetime(created_at) DESC
+      LIMIT 30
+    `)
+    .all()
+    .map((row) => ({
+      id: row.order_number.replace('#', ''),
+      date: formatLegacyDate(new Date(row.created_at)),
+      customer: row.customer_name,
+      state: row.status,
+      payment: Number(row.subtotal.toFixed(2)),
+      paymentState: row.payment_status,
+      currency: row.currency,
+      paymentMethod: row.payment_method,
+      paymentCurrency: row.payment_currency || row.currency,
+      amountReceived: Number(row.amount_received ?? 0),
+      changeAmount: Number(row.change_amount ?? 0),
+    }))
+
+  const favorites = db
+    .prepare(`
+      SELECT
+        oi.product_id AS id,
+        oi.product_name AS name,
+        p.label AS category,
+        p.image AS image,
+        SUM(oi.quantity) AS orderCount
+      FROM order_items oi
+      JOIN products p ON p.id = oi.product_id
+      GROUP BY oi.product_id, oi.product_name, p.label, p.image
+      ORDER BY orderCount DESC
+      LIMIT 8
+    `)
+    .all()
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      category: row.category,
+      image: row.image,
+      orderCount: row.orderCount,
+    }))
+  const inventoryMovements = getInventoryMovements(80)
+
+  return {
+    categories,
+    products,
+    trackingOrders,
+    billingQueue,
+    tableGroups,
+    historyRows,
+    favorites,
+    reportOrderRows,
+    inventoryMovements,
+  }
+}
+
+export function createOrder(payload) {
+  const nextOrderNumber = getNextOrderNumber()
+  const findProductStock = db.prepare('SELECT id, name, stock_qty FROM products WHERE id = ?')
+  const deductStock = db.prepare(`
+    UPDATE products
+    SET stock_qty = stock_qty - ?
+    WHERE id = ?
+  `)
+
+  const insertOrder = db.prepare(`
+    INSERT INTO orders (
+      order_number, customer_name, table_name, order_type, payment_method, currency, payment_currency,
+      amount_received, change_amount, status, payment_status, kitchen_status, created_at,
+      subtotal, tax, discount, total
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const insertOrderItem = db.prepare(`
+    INSERT INTO order_items (
+      order_id, product_id, product_name, quantity, unit_price, total_price, options_json, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const insertMovement = db.prepare(`
+    INSERT INTO inventory_movements (
+      product_id, order_id, movement_type, quantity, before_qty, after_qty, note, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  db.exec('BEGIN IMMEDIATE TRANSACTION')
+  try {
+    const stockChecks = payload.items.map((item) => {
+      const quantityRequested = Number(item.quantity ?? 0)
+      const product = findProductStock.get(item.productId)
+      if (!product) {
+        throw createDomainError('PRODUCT_NOT_FOUND', `Product ${item.productId} not found.`)
+      }
+      const available = Number(product.stock_qty ?? 0)
+      if (quantityRequested > available + 0.000001) {
+        throw createDomainError(
+          'INSUFFICIENT_STOCK',
+          `Insufficient stock for ${product.name}. Available ${available}, requested ${quantityRequested}.`,
+        )
+      }
+      return {
+        productId: item.productId,
+        quantityRequested,
+        beforeQty: available,
+        afterQty: Math.max(0, available - quantityRequested),
+        productName: String(product.name ?? item.productId),
+      }
+    })
+    const createdAtIso = new Date().toISOString()
+
+    const insertOrderResult = insertOrder.run(
+      nextOrderNumber,
+      payload.customerName,
+      payload.tableName,
+      payload.orderType,
+      payload.paymentMethod ?? 'Cash',
+      payload.currency ?? 'USD',
+      payload.paymentCurrency ?? payload.currency ?? 'USD',
+      payload.amountReceived ?? payload.total ?? 0,
+      payload.changeAmount ?? 0,
+      'Active',
+      payload.paymentStatus ?? 'Unpaid',
+      'On Kitchen Hand',
+      createdAtIso,
+      payload.subtotal,
+      payload.tax,
+      payload.discount,
+      payload.total,
+    )
+    const orderId = Number(insertOrderResult.lastInsertRowid)
+
+    payload.items.forEach((item) => {
+      insertOrderItem.run(
+        orderId,
+        item.productId,
+        item.productName,
+        item.quantity,
+        item.itemPrice,
+        item.totalPrice,
+        JSON.stringify(item.selectedOptions ?? {}),
+        item.notes ?? '',
+      )
+    })
+
+    stockChecks.forEach((item) => {
+      deductStock.run(item.quantityRequested, item.productId)
+      insertMovement.run(
+        item.productId,
+        orderId,
+        'sale',
+        -item.quantityRequested,
+        item.beforeQty,
+        item.afterQty,
+        `Order ${nextOrderNumber} (${item.productName})`,
+        createdAtIso,
+      )
+    })
+
+    db.exec('COMMIT')
+    return { orderId, orderNumber: nextOrderNumber }
+  } catch (error) {
+    db.exec('ROLLBACK')
+    throw error
+  }
+}
+
+export function updateOrderStatus(orderNumber, status, paymentStatus) {
+  const normalizedStatus = String(status ?? '').trim()
+  const normalizedPaymentStatus = paymentStatus == null ? null : String(paymentStatus).trim()
+  if (!ORDER_STATUSES.has(normalizedStatus)) {
+    throw createDomainError('INVALID_ORDER_STATUS', `Invalid order status: ${normalizedStatus || 'unknown'}.`)
+  }
+  if (normalizedPaymentStatus !== null && !PAYMENT_STATUSES.has(normalizedPaymentStatus)) {
+    throw createDomainError(
+      'INVALID_PAYMENT_STATUS',
+      `Invalid payment status: ${normalizedPaymentStatus || 'unknown'}.`,
+    )
+  }
+  const currentOrder = db
+    .prepare(
+      `
+      SELECT status, payment_status
+      FROM orders
+      WHERE order_number = ?
+    `,
+    )
+    .get(orderNumber)
+  if (!currentOrder) {
+    throw createDomainError('ORDER_NOT_FOUND', 'Order not found.')
+  }
+  const currentStatus = String(currentOrder.status ?? '')
+  const transitionSet = ORDER_TRANSITIONS[currentStatus] ?? new Set([currentStatus])
+  if (!transitionSet.has(normalizedStatus)) {
+    throw createDomainError(
+      'INVALID_ORDER_TRANSITION',
+      `Cannot move order from ${currentStatus} to ${normalizedStatus}.`,
+    )
+  }
+  const resolvedPaymentStatus = normalizedPaymentStatus ?? String(currentOrder.payment_status ?? 'Unpaid')
+  if ((normalizedStatus === 'Closed' || normalizedStatus === 'Done') && resolvedPaymentStatus !== 'Paid') {
+    throw createDomainError(
+      'PAYMENT_REQUIRED',
+      `Order must be Paid before changing status to ${normalizedStatus}.`,
+    )
+  }
+
+  const update = db.prepare(`
+    UPDATE orders
+    SET
+      status = ?,
+      payment_status = COALESCE(?, payment_status),
+      kitchen_status = CASE
+        WHEN ? = 'Active' THEN 'On Kitchen Hand'
+        WHEN ? = 'Closed' THEN 'All Done'
+        WHEN ? = 'Done' THEN 'All Done'
+        WHEN ? = 'Canceled' THEN 'Canceled'
+        ELSE kitchen_status
+      END
+    WHERE order_number = ?
+  `)
+  const result = update.run(
+    normalizedStatus,
+    normalizedPaymentStatus,
+    normalizedStatus,
+    normalizedStatus,
+    normalizedStatus,
+    normalizedStatus,
+    orderNumber,
+  )
+  return result.changes > 0
+}
+
+export function getReportSummary() {
+  const metrics = db.prepare(`
+    SELECT
+      COALESCE(SUM(
+        CASE
+          WHEN currency = 'KHR' THEN total / 4100.0
+          ELSE total
+        END
+      ), 0) AS totalSales,
+      COALESCE(SUM(CASE WHEN status != 'Canceled' THEN 1 ELSE 0 END), 0) AS totalOrders,
+      COUNT(DISTINCT customer_name) AS totalCustomers,
+      COALESCE(SUM(
+        CASE
+          WHEN currency = 'KHR' THEN (total - tax) / 4100.0
+          ELSE (total - tax)
+        END
+      ), 0) AS netProfit
+    FROM orders
+  `).get()
+
+  return {
+    totalSales: Number(metrics.totalSales.toFixed(2)),
+    totalOrders: metrics.totalOrders,
+    totalCustomers: metrics.totalCustomers,
+    netProfit: Number(metrics.netProfit.toFixed(2)),
+  }
+}
+
+function getNextOrderNumber() {
+  const row = db
+    .prepare(
+      `
+      SELECT COALESCE(MAX(CAST(SUBSTR(order_number, 2) AS INTEGER)), 0) AS current
+      FROM orders
+      WHERE order_number GLOB '#[0-9]*'
+    `,
+    )
+    .get()
+  const current = Number(row?.current ?? 0)
+  return `#${String(current + 1).padStart(3, '0')}`
+}
+
+function formatClock(date) {
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatLegacyDate(date) {
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}/${month}/${year} - ${formatClock(date)}`
+}
+
+function createDomainError(code, message) {
+  const error = new Error(message)
+  error.code = code
+  return error
+}
+
+function hashPassword(password, username = '') {
+  const safePassword = String(password ?? '')
+  const safeUsername = String(username ?? '').trim().toLowerCase()
+  return createHash('sha256')
+    .update(`${safeUsername}|${safePassword}|${AUTH_PEPPER}`)
+    .digest('hex')
+}
+
+function ensureDefaultUsers() {
+  const userCount = Number(db.prepare('SELECT COUNT(*) AS count FROM users').get()?.count ?? 0)
+  if (userCount > 0) return
+  const insertUser = db.prepare(`
+    INSERT INTO users (
+      username, display_name, role, password_digest, active, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `)
+  const now = new Date().toISOString()
+  DEFAULT_USERS.forEach((user) => {
+    insertUser.run(
+      user.username,
+      user.displayName,
+      user.role,
+      hashPassword(user.password, user.username),
+      1,
+      now,
+    )
+  })
+}

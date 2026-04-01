@@ -1,0 +1,401 @@
+import {
+  CalendarDays,
+  ChevronDown,
+  CircleDot,
+  Clock3,
+  Download,
+  Filter,
+  Menu,
+  Power,
+  Search,
+} from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { HeaderChip, MetricCard, MiniMetric } from '../components/common'
+import { FAVORITES, REPORT_ORDER_ROWS } from '../uiData'
+import { formatCurrency, formatDate } from '../utils/format'
+
+export function ReportScreen({
+  now,
+  onOpenMenu,
+  favorites = FAVORITES,
+  reportOrderRows = REPORT_ORDER_ROWS,
+  summary = {
+    totalSales: 12650,
+    totalOrders: 1250,
+    totalCustomers: 400,
+    netProfit: 12650,
+  },
+  onAction,
+}) {
+  const [period, setPeriod] = useState('Monthly')
+  const [showGraph, setShowGraph] = useState(true)
+  const [favoriteSearchOpen, setFavoriteSearchOpen] = useState(false)
+  const [favoriteKeyword, setFavoriteKeyword] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState('All')
+  const [detailRow, setDetailRow] = useState(null)
+  const [metricMode, setMetricMode] = useState('Total Sales Amount')
+
+  const filteredFavorites = useMemo(() => {
+    const keyword = favoriteKeyword.trim().toLowerCase()
+    if (!keyword) return favorites
+    return favorites.filter(
+      (item) =>
+        item.name.toLowerCase().includes(keyword) ||
+        item.category.toLowerCase().includes(keyword),
+    )
+  }, [favorites, favoriteKeyword])
+
+  const filteredOrderRows = useMemo(() => {
+    if (paymentFilter === 'All') return reportOrderRows
+    return reportOrderRows.filter((row) => row.paymentState === paymentFilter)
+  }, [paymentFilter, reportOrderRows])
+
+  const miniMetricAmount = Number(summary.totalSales || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  const miniMetricGrowth = Number(summary.netProfit || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  const miniMetricGrowthPct = summary.totalSales > 0 ? ((summary.netProfit / summary.totalSales) * 100).toFixed(1) : '0.0'
+
+  const handleDownload = () => {
+    const header = ['Order', 'Date', 'Customer', 'Status', 'Payment', 'PaymentState']
+    const csvRows = filteredOrderRows.map((row) => [
+      row.id,
+      row.date,
+      row.customer,
+      row.state,
+      Number(row.payment).toFixed(2),
+      row.paymentState,
+    ])
+    const csv = [header, ...csvRows]
+      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `report-${period.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    onAction?.('Report CSV downloaded.')
+  }
+
+  const cyclePeriod = () => {
+    setPeriod((current) => {
+      const next = current === 'Monthly' ? 'Weekly' : current === 'Weekly' ? 'Daily' : 'Monthly'
+      onAction?.(`Report period switched to ${next}.`)
+      return next
+    })
+  }
+
+  const cyclePaymentFilter = () => {
+    setPaymentFilter((current) => {
+      const next = current === 'All' ? 'Paid' : current === 'Paid' ? 'Unpaid' : 'All'
+      onAction?.(`Order filter: ${next}.`)
+      return next
+    })
+  }
+
+  return (
+    <div className="grid h-screen w-full grid-cols-1 overflow-hidden">
+      <div className="flex min-h-0 h-full flex-col overflow-hidden bg-white">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 md:px-6">
+          <div className="flex items-center gap-2">
+            <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-slate-500">
+              <Menu size={18} />
+            </button>
+            <h1 className="text-xl font-semibold text-slate-900">Report</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownload}
+              className="ui-btn ui-btn-secondary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-slate-600"
+            >
+              Download
+              <Download size={14} />
+            </button>
+            <HeaderChip icon={CalendarDays} label={formatDate(now)} />
+            <div className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-[#1C8370]">
+              Open Order
+            </div>
+            <button
+              onClick={() => {
+                setPaymentFilter('All')
+                setFavoriteKeyword('')
+                onAction?.('Report filters reset.')
+              }}
+              className="ui-btn ui-btn-ghost ui-icon-btn text-[#1C8370] hover:bg-emerald-50"
+            >
+              <Power size={18} />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="mb-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="font-medium text-slate-700">Date Period:</span>
+              <button
+                onClick={cyclePeriod}
+                className="ui-btn ui-btn-secondary inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm"
+              >
+                {period} <CalendarDays size={14} />
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                setShowGraph((current) => !current)
+                onAction?.(showGraph ? 'Graph hidden.' : 'Graph shown.')
+              }}
+              className="ui-btn ui-btn-secondary inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm"
+            >
+              {showGraph ? 'Hide Graph' : 'Show Graph'}
+              <CircleDot size={16} className={showGraph ? 'text-[#2D71F8]' : 'text-slate-400'} />
+            </button>
+          </div>
+
+          <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Total Sales Amount"
+              value={formatNumber(summary.totalSales)}
+              unit="USD"
+              delta={`Orders: ${formatNumber(summary.totalOrders)}`}
+              growth="Live"
+            />
+            <MetricCard
+              title="Total Product Sales"
+              value={formatNumber(summary.totalOrders)}
+              unit="Items"
+              delta="From SQLite"
+              growth="Live"
+            />
+            <MetricCard
+              title="Total Customers"
+              value={formatNumber(summary.totalCustomers)}
+              unit="Persons"
+              delta="Unique customers"
+              growth="Live"
+            />
+            <MetricCard
+              title="Net Profit"
+              value={formatNumber(summary.netProfit)}
+              unit="USD"
+              delta="Total - Tax"
+              growth="Live"
+            />
+          </div>
+
+          <div className="mb-5 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+            <section className="ui-surface p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">Report Graph</h3>
+                <button
+                  onClick={() =>
+                    setMetricMode((current) =>
+                      current === 'Total Sales Amount' ? 'Total Orders' : 'Total Sales Amount',
+                    )
+                  }
+                  className="ui-btn ui-btn-secondary inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-slate-600"
+                >
+                  {metricMode}
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+              {showGraph ? (
+                <div className="h-[220px] overflow-hidden rounded-xl border border-slate-100 bg-[linear-gradient(120deg,rgba(45,113,248,0.03),rgba(45,113,248,0.09))] p-3">
+                  <svg viewBox="0 0 640 200" className="h-full w-full">
+                    <path
+                      d="M0 120 C30 90, 50 150, 90 120 C130 90, 160 35, 210 70 C245 95, 265 130, 300 100 C330 70, 360 55, 390 110 C420 160, 470 150, 520 95 C550 65, 590 100, 640 130"
+                      fill="none"
+                      stroke="#2D71F8"
+                      strokeWidth="3"
+                    />
+                    <path
+                      d="M0 120 C30 90, 50 150, 90 120 C130 90, 160 35, 210 70 C245 95, 265 130, 300 100 C330 70, 360 55, 390 110 C420 160, 470 150, 520 95 C550 65, 590 100, 640 130 L640 200 L0 200 Z"
+                      fill="url(#reportFill)"
+                    />
+                    <defs>
+                      <linearGradient id="reportFill" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stopColor="#2D71F8" stopOpacity="0.2" />
+                        <stop offset="100%" stopColor="#2D71F8" stopOpacity="0.02" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+              ) : (
+                <div className="flex h-[220px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                  Graph is hidden. Click "Show Graph" to display it.
+                </div>
+              )}
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <MiniMetric title="Amount" value={miniMetricAmount} unit="USD" />
+                <MiniMetric title="Growth" value={miniMetricGrowth} unit="USD" />
+                <MiniMetric title="Growth Percentage" value={miniMetricGrowthPct} unit="Percent (%)" />
+              </div>
+            </section>
+
+            <section className="ui-surface p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-slate-900">Favorite Product</h3>
+                <button
+                  onClick={() => {
+                    setFavoriteSearchOpen((open) => !open)
+                    if (favoriteSearchOpen) setFavoriteKeyword('')
+                  }}
+                  className="ui-btn ui-btn-ghost ui-icon-btn text-slate-400"
+                >
+                  <Search size={15} />
+                </button>
+              </div>
+              {favoriteSearchOpen && (
+                <input
+                  value={favoriteKeyword}
+                  onChange={(event) => setFavoriteKeyword(event.target.value)}
+                  placeholder="Search favorite product..."
+                  className="ui-input mb-3 px-3 py-2 text-sm text-slate-700"
+                />
+              )}
+              <div className="space-y-3">
+                {filteredFavorites.map((item) => (
+                  <article key={item.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2.5">
+                    <div className="flex items-center gap-3">
+                      <img src={item.image} alt={item.name} className="h-10 w-10 rounded-lg object-cover" />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+                        <p className="text-xs text-slate-400">{item.category}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-700">{item.orderCount} Times</p>
+                  </article>
+                ))}
+                {filteredFavorites.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-sm text-slate-400">
+                    No favorite products match this search.
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <section className="ui-surface">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-3">
+              <h3 className="text-lg font-semibold text-slate-900">All Orders</h3>
+              <div className="flex items-center gap-2">
+                <HeaderChip icon={CalendarDays} label="May 25, 2024 - May 29, 2024" />
+                <HeaderChip icon={Clock3} label="08:00 AM - 01:00 PM" />
+                <button
+                  onClick={cyclePaymentFilter}
+                  className="ui-btn ui-btn-ghost ui-icon-btn text-slate-500"
+                >
+                  <Filter size={15} />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p>#</p>
+              <p>Date & Time</p>
+              <p>Customer Name</p>
+              <p>Order Status</p>
+              <p>Total Payment</p>
+              <p>Payment Status ({paymentFilter})</p>
+              <p>Orders</p>
+            </div>
+            <div className="max-h-[280px] overflow-y-auto">
+              {filteredOrderRows.map((row) => (
+                <div
+                  key={row.id + row.customer}
+                  className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 border-t border-slate-100 px-3 py-3 text-sm text-slate-700"
+                >
+                  <p>{row.id}</p>
+                  <p>{row.date}</p>
+                  <p>{row.customer}</p>
+                  <p>{row.state}</p>
+                  <p>{formatCurrency(row.payment, row.currency ?? 'USD')}</p>
+                  <p className={row.paymentState === 'Paid' ? 'text-[#1C8370]' : 'text-[#FC4A4A]'}>
+                    {row.paymentState}
+                  </p>
+                  <button onClick={() => setDetailRow(row)} className="text-[#2D71F8] hover:underline">
+                    Detail
+                  </button>
+                </div>
+              ))}
+              {filteredOrderRows.length === 0 && (
+                <div className="px-3 py-4 text-sm text-slate-400">No orders found for this payment filter.</div>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {detailRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Report Order Detail</h3>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              <p>
+                <span className="font-semibold text-slate-800">Order:</span> #{detailRow.id}
+              </p>
+              <p>
+                <span className="font-semibold text-slate-800">Date:</span> {detailRow.date}
+              </p>
+              <p>
+                <span className="font-semibold text-slate-800">Customer:</span> {detailRow.customer}
+              </p>
+              <p>
+                <span className="font-semibold text-slate-800">Status:</span> {detailRow.state}
+              </p>
+              <p>
+                <span className="font-semibold text-slate-800">Payment:</span>{' '}
+                {formatCurrency(detailRow.payment, detailRow.currency ?? 'USD')}
+              </p>
+              <p>
+                <span className="font-semibold text-slate-800">Payment State:</span>{' '}
+                {detailRow.paymentState}
+              </p>
+              {detailRow.paymentMethod && (
+                <p>
+                  <span className="font-semibold text-slate-800">Payment Method:</span>{' '}
+                  {detailRow.paymentMethod}
+                </p>
+              )}
+              {Number.isFinite(detailRow.amountReceived) && (
+                <p>
+                  <span className="font-semibold text-slate-800">Received:</span>{' '}
+                  {formatCurrency(
+                    detailRow.amountReceived,
+                    detailRow.paymentCurrency ?? detailRow.currency ?? 'USD',
+                  )}
+                </p>
+              )}
+              {Number.isFinite(detailRow.changeAmount) && (
+                <p>
+                  <span className="font-semibold text-slate-800">Change:</span>{' '}
+                  {formatCurrency(
+                    detailRow.changeAmount,
+                    detailRow.paymentCurrency ?? detailRow.currency ?? 'USD',
+                  )}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => setDetailRow(null)}
+              className="ui-btn ui-btn-primary mt-4 w-full py-2.5 text-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+}
