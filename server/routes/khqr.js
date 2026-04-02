@@ -1,5 +1,4 @@
 import { KHQR, CURRENCY, TAG } from 'ts-khqr';
-import crypto from 'crypto';
 
 export async function generateKHQR(req, res) {
     const { amount, billNumber, currency = 'USD' } = req.body;

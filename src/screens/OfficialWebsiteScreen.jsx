@@ -1,92 +1,150 @@
 import {
   ArrowRight,
-  BookOpenText,
+  Banknote,
   CheckCircle2,
-  ChevronDown,
-  CircleUserRound,
-  Coffee,
-  HeartHandshake,
-  Leaf,
-  Menu,
-  MessageCircleHeart,
-  ShieldCheck,
+  Briefcase,
+  CreditCard,
+  Crosshair,
+  Home,
+  Loader2,
+  LogOut,
+  LogIn,
+  MapPin,
+  Minus,
+  Plus,
+  QrCode,
   ShoppingCart,
-  Sparkles,
-  Truck,
-  Zap,
+  Trash2,
+  User,
+  UserRound,
+  X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { fetchPublicCatalog } from '../api/client'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  createPublicOrder,
+  fetchPublicCatalog,
+  fetchPublicCustomer,
+  fetchPublicPaymentConfig,
+  getStoredPublicCustomerToken,
+  logoutPublicCustomer,
+  updatePublicCustomerProfile,
+} from '../api/client'
+import KHQRCard from '../components/KHQRCard'
 import { formatCurrency } from '../utils/format'
-import { PUBLIC_CART_EVENT, addPublicCartItem, getPublicCartCount } from '../utils/publicCart'
+import {
+  PUBLIC_CART_EVENT,
+  addPublicCartItem,
+  getPublicCartCount,
+  readPublicCart,
+  writePublicCart,
+} from '../utils/publicCart'
+import './OfficialWebsiteScreen.css'
 
-const MAIN_NAV = [
-  { id: 'home', label: 'Home' },
-  { id: 'shop', label: 'Shop' },
+const LeafletAddressPicker = lazy(() => import('../components/LeafletAddressPicker'))
+
+const ADDRESS_BOOK_STORAGE_KEY = 'eloise-public-address-book-v1'
+
+const MARQUEE_ITEMS = [
+  'Specialty Coffee',
+  'Fresh Pastries Daily',
+  'Artisan Breads',
+  'Handcrafted Donuts',
+  'Seasonal Cakes',
+  'Dine In & Take Away',
 ]
 
-const ABOUT_NAV = [
-  { id: 'story', label: 'Our Story', desc: 'Who we are and our mission' },
-  { id: 'tips', label: 'Blog & Tips', desc: 'Coffee advice and guides' },
-  { id: 'faq', label: 'FAQ', desc: 'Common questions answered' },
-  { id: 'contact', label: 'Contact Us', desc: 'Get in touch with our team' },
+const NAV_LINKS = [
+  { href: '#about', label: 'Our Story' },
+  { href: '#menu', label: 'Menu' },
+  { href: '#experience', label: 'Experience' },
+  { href: '#location', label: 'Visit Us' },
+]
+
+const EXPERIENCE_ITEMS = [
+  {
+    icon: '🫘',
+    title: 'Single-Origin Beans',
+    text: 'Every batch traced from farm to cup. We partner with sustainable growers across Ethiopia, Colombia, and Guatemala.',
+  },
+  {
+    icon: '🥐',
+    title: 'Baked Fresh Daily',
+    text: 'Our kitchen begins before dawn. Croissants, sourdoughs, and cakes crafted each morning with seasonal ingredients.',
+  },
+  {
+    icon: '🪑',
+    title: 'Warm Atmosphere',
+    text: 'Whether dine-in or take away, we design every visit to feel like a breath of fresh air in your busy day.',
+  },
+  {
+    icon: '📱',
+    title: 'Easy Ordering',
+    text: 'Walk in, sit down, and let us handle the rest. Track your order in real-time and customize to your taste.',
+  },
+  {
+    icon: '🎁',
+    title: 'Loyalty Rewards',
+    text: 'Every visit counts. Earn points on every purchase and unlock exclusive menu items and seasonal specials.',
+  },
+  {
+    icon: '🌿',
+    title: 'Sustainably Minded',
+    text: 'Compostable packaging, direct-trade sourcing, and a commitment to reducing our footprint without reducing taste.',
+  },
 ]
 
 const TESTIMONIALS = [
   {
     quote:
-      'Great quality coffee at a fair price. I like how simple checkout is and delivery is always on time.',
-    name: 'Sokha Chan',
-    location: 'Phnom Penh',
-    badge: 'S',
+      '"The Beef Crowich is unlike anything I have had. And the coffee, absolutely perfect every single time."',
+    name: 'Sarah M.',
+    role: 'Regular since opening day',
+    avatar: '👩',
   },
   {
     quote:
-      'The dark roast became our family favorite. Smooth taste, strong aroma, and easy ordering experience.',
-    name: 'Dara Pov',
-    location: 'Siem Reap',
-    badge: 'D',
+      '"Eloise Coffee is my second home. The atmosphere, the team, and that Cheezy Sourdough. Pure magic."',
+    name: 'James T.',
+    role: 'Coffee enthusiast',
+    avatar: '👨',
   },
   {
     quote:
-      'I use this every week for office orders. Clean packaging and consistently fresh beans.',
-    name: 'Mony Kea',
-    location: 'Battambang',
-    badge: 'M',
+      '"I come for the Americano and stay for the Cheesy Cheesecake. Honestly the best coffee shop in town."',
+    name: 'Priya K.',
+    role: 'Food blogger',
+    avatar: '👩',
   },
 ]
 
-const INFO_TILES = [
-  {
-    icon: Truck,
-    title: 'Fast Delivery',
-    text: 'Same-day delivery available in Phnom Penh.',
-    tone: 'bg-[#edf4ff] text-[#2d71f8]',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Quality Checked',
-    text: 'Roast and packaging reviewed before dispatch.',
-    tone: 'bg-[#eef8f2] text-[#1c8370]',
-  },
-  {
-    icon: HeartHandshake,
-    title: 'Customer Support',
-    text: 'Friendly support for order updates and help.',
-    tone: 'bg-[#fff1f3] text-[#d94670]',
-  },
-  {
-    icon: Zap,
-    title: 'Quick Checkout',
-    text: 'Simple ordering flow with minimal steps.',
-    tone: 'bg-[#fff7ed] text-[#ea580c]',
-  },
+const DAY_SCHEDULE = {
+  Monday: '7:00 AM - 9:00 PM',
+  Tuesday: '7:00 AM - 9:00 PM',
+  Wednesday: '7:00 AM - 9:00 PM',
+  Thursday: '7:00 AM - 9:00 PM',
+  Friday: '7:00 AM - 10:00 PM',
+  Saturday: '8:00 AM - 10:00 PM',
+  Sunday: '8:00 AM - 8:00 PM',
+}
+
+const PAYMENT_METHOD_ITEMS = [
+  { id: 'Cash', label: 'Cash on Delivery', icon: Banknote },
+  { id: 'KHQR', label: 'Pay via KHQR', icon: QrCode },
+  { id: 'Card', label: 'Card', icon: CreditCard },
 ]
 
-function ratingByIndex(index) {
-  if (index % 4 === 0) return 4.9
-  if (index % 3 === 0) return 4.7
-  return 4.8
+const PRODUCT_EMOJI_BY_CATEGORY = {
+  coffee: '☕',
+  pastries: '🥐',
+  pastry: '🥐',
+  cake: '🍰',
+  cakes: '🍰',
+  breads: '🍞',
+  bread: '🍞',
+  donut: '🍩',
+  donuts: '🍩',
+  sandwich: '🥪',
+  sandwiches: '🥪',
 }
 
 function normalizePositiveInteger(value) {
@@ -95,578 +153,1454 @@ function normalizePositiveInteger(value) {
   return Math.max(0, Math.floor(parsed))
 }
 
-export function OfficialWebsiteScreen() {
+function toSafeCurrency(value) {
+  return String(value ?? '').toUpperCase() === 'KHR' ? 'KHR' : 'USD'
+}
+
+function isAbortRequestError(error) {
+  if (!error) return false
+  if (error.name === 'AbortError') return true
+  return /aborted/i.test(String(error.message ?? ''))
+}
+
+function deriveProductEmoji(category, index) {
+  const key = String(category ?? '').trim().toLowerCase()
+  if (PRODUCT_EMOJI_BY_CATEGORY[key]) return PRODUCT_EMOJI_BY_CATEGORY[key]
+  if (index % 4 === 0) return '☕'
+  if (index % 4 === 1) return '🥐'
+  if (index % 4 === 2) return '🍰'
+  return '🍞'
+}
+
+function hydrateCartLines(products = [], rawLines = []) {
+  const productMap = new Map(products.map((product) => [String(product.id), product]))
+  return rawLines
+    .map((line) => {
+      const productId = String(line?.productId ?? '')
+      const product = productMap.get(productId)
+      if (!product) return null
+      const maxQty = normalizePositiveInteger(product.stockQty)
+      if (maxQty <= 0) return null
+      const quantity = Math.min(maxQty, normalizePositiveInteger(line.quantity))
+      if (quantity <= 0) return null
+      return { product, quantity }
+    })
+    .filter(Boolean)
+}
+
+function parseCoordinatesFromText(text) {
+  const source = String(text ?? '')
+  if (!source) return null
+
+  const queryMatch = source.match(/q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i)
+  if (queryMatch) {
+    const lat = Number(queryMatch[1])
+    const lng = Number(queryMatch[2])
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng }
+  }
+
+  const coordinateMatch = source.match(/(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/)
+  if (!coordinateMatch) return null
+  const lat = Number(coordinateMatch[1])
+  const lng = Number(coordinateMatch[2])
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null
+  return { lat, lng }
+}
+
+function readAddressBook() {
+  if (typeof window === 'undefined') return { home: '', work: '' }
+  try {
+    const raw = window.localStorage.getItem(ADDRESS_BOOK_STORAGE_KEY)
+    if (!raw) return { home: '', work: '' }
+    const parsed = JSON.parse(raw)
+    return {
+      home: String(parsed?.home ?? '').trim(),
+      work: String(parsed?.work ?? '').trim(),
+    }
+  } catch {
+    return { home: '', work: '' }
+  }
+}
+
+function writeAddressBook(next) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(
+    ADDRESS_BOOK_STORAGE_KEY,
+    JSON.stringify({
+      home: String(next?.home ?? '').trim(),
+      work: String(next?.work ?? '').trim(),
+    }),
+  )
+}
+
+export function OfficialWebsiteScreen({ checkoutPage = false }) {
   const [catalog, setCatalog] = useState({
+    categories: [],
     products: [],
     currency: 'USD',
+    taxRate: 10,
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [activeCategory, setActiveCategory] = useState('all')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [aboutMenuOpen, setAboutMenuOpen] = useState(false)
   const [cartCount, setCartCount] = useState(() => getPublicCartCount())
-  const aboutMenuRef = useRef(null)
+  const [cartLines, setCartLines] = useState([])
+  const [paymentMethod, setPaymentMethod] = useState('Cash')
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [customerNote, setCustomerNote] = useState('')
+  const [customerSession, setCustomerSession] = useState(null)
+  const [customerReady, setCustomerReady] = useState(false)
+  const [paymentConfig, setPaymentConfig] = useState({
+    cashLabel: 'Cash on Delivery',
+    khqr: {
+      enabled: false,
+      qr: '',
+      merchantName: '',
+      merchantCity: '',
+      accountId: '',
+    },
+  })
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileLocating, setProfileLocating] = useState(false)
+  const [profileError, setProfileError] = useState('')
+  const [profileSuccess, setProfileSuccess] = useState('')
+  const [profileFullName, setProfileFullName] = useState('')
+  const [profileEmail, setProfileEmail] = useState('')
+  const [profilePhone, setProfilePhone] = useState('')
+  const [profileAddress, setProfileAddress] = useState('')
+  const [selectedCoordinates, setSelectedCoordinates] = useState(null)
+  const [locationResolving, setLocationResolving] = useState(false)
+  const [profileMapOpen, setProfileMapOpen] = useState(false)
+  const [checkoutMapOpen, setCheckoutMapOpen] = useState(true)
+  const [savedAddresses, setSavedAddresses] = useState(() => readAddressBook())
+  const [placingOrder, setPlacingOrder] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
+  const [checkoutSuccess, setCheckoutSuccess] = useState('')
+  const [latestOrder, setLatestOrder] = useState(null)
+  const [trackingNow, setTrackingNow] = useState(() => Date.now())
+  const [addedState, setAddedState] = useState({})
+  const pageRef = useRef(null)
+  const profilePanelRef = useRef(null)
 
   useEffect(() => {
     const controller = new AbortController()
     fetchPublicCatalog(controller.signal)
       .then((payload) => {
         setCatalog({
+          categories: Array.isArray(payload?.categories) ? payload.categories : [],
           products: Array.isArray(payload?.products) ? payload.products : [],
-          currency: String(payload?.currency ?? 'USD').toUpperCase() === 'KHR' ? 'KHR' : 'USD',
+          currency: toSafeCurrency(payload?.currency),
+          taxRate: Number(payload?.taxRate ?? 10),
         })
+        setError('')
       })
       .catch((requestError) => {
-        setError(requestError.message || 'Unable to load product preview.')
+        if (isAbortRequestError(requestError)) return
+        setError(requestError?.message || 'Unable to load menu catalog.')
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      })
     return () => controller.abort()
   }, [])
 
   useEffect(() => {
-    if (!aboutMenuOpen) return undefined
-    const handleClickOutside = (event) => {
-      if (!aboutMenuRef.current?.contains(event.target)) {
-        setAboutMenuOpen(false)
-      }
+    const controller = new AbortController()
+    fetchPublicPaymentConfig(controller.signal)
+      .then((payload) => {
+        setPaymentConfig({
+          cashLabel: String(payload?.cashLabel ?? 'Cash on Delivery'),
+          khqr: {
+            enabled: Boolean(payload?.khqr?.enabled),
+            qr: String(payload?.khqr?.qr ?? ''),
+            merchantName: String(payload?.khqr?.merchantName ?? ''),
+            merchantCity: String(payload?.khqr?.merchantCity ?? ''),
+            accountId: String(payload?.khqr?.accountId ?? ''),
+          },
+        })
+      })
+      .catch(() => {
+        // Keep fallback payment config when request fails.
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (!getStoredPublicCustomerToken()) {
+      setCustomerSession(null)
+      setCustomerReady(true)
+      return undefined
     }
-    window.addEventListener('mousedown', handleClickOutside)
-    return () => window.removeEventListener('mousedown', handleClickOutside)
-  }, [aboutMenuOpen])
+    const controller = new AbortController()
+    fetchPublicCustomer(controller.signal)
+      .then((payload) => {
+        setCustomerSession(payload?.customer ?? null)
+      })
+      .catch(() => {
+        setCustomerSession(null)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCustomerReady(true)
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (!customerSession) return
+    setProfileFullName(String(customerSession.fullName ?? ''))
+    setProfileEmail(String(customerSession.email ?? ''))
+    setProfilePhone(String(customerSession.phone ?? ''))
+    const nextAddress = String(customerSession.address ?? '')
+    setProfileAddress(nextAddress)
+    setSelectedCoordinates(parseCoordinatesFromText(nextAddress))
+    if (!customerName.trim()) setCustomerName(String(customerSession.fullName ?? ''))
+    if (!customerPhone.trim()) setCustomerPhone(String(customerSession.phone ?? ''))
+  }, [customerName, customerPhone, customerSession])
+
+  useEffect(() => {
+    if (customerSession) return
+    setProfileOpen(false)
+    setProfileError('')
+    setProfileSuccess('')
+    setProfileFullName('')
+    setProfileEmail('')
+    setProfilePhone('')
+    setProfileAddress('')
+    setSelectedCoordinates(null)
+    setProfileMapOpen(false)
+  }, [customerSession])
+
+  useEffect(() => {
+    const parsed = parseCoordinatesFromText(profileAddress)
+    if (!parsed) return
+    setSelectedCoordinates(parsed)
+  }, [profileAddress])
+
+  const syncCartFromStorage = useCallback(() => {
+    const rawLines = readPublicCart()
+    if (!Array.isArray(catalog.products) || catalog.products.length === 0) {
+      setCartCount(rawLines.reduce((sum, line) => sum + Number(line?.quantity ?? 0), 0))
+      return
+    }
+    const normalizedLines = hydrateCartLines(catalog.products, rawLines)
+    setCartLines(normalizedLines)
+    setCartCount(normalizedLines.reduce((sum, line) => sum + line.quantity, 0))
+
+    const normalizedRaw = normalizedLines.map((line) => ({
+      productId: line.product.id,
+      quantity: line.quantity,
+    }))
+    if (JSON.stringify(normalizedRaw) !== JSON.stringify(rawLines)) {
+      writePublicCart(normalizedRaw)
+    }
+  }, [catalog.products])
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined
-    const syncCartCount = () => setCartCount(getPublicCartCount())
-    syncCartCount()
-    window.addEventListener('focus', syncCartCount)
-    window.addEventListener('storage', syncCartCount)
-    window.addEventListener(PUBLIC_CART_EVENT, syncCartCount)
+    const syncTimer = window.setTimeout(syncCartFromStorage, 0)
+    window.addEventListener('focus', syncCartFromStorage)
+    window.addEventListener('storage', syncCartFromStorage)
+    window.addEventListener(PUBLIC_CART_EVENT, syncCartFromStorage)
     return () => {
-      window.removeEventListener('focus', syncCartCount)
-      window.removeEventListener('storage', syncCartCount)
-      window.removeEventListener(PUBLIC_CART_EVENT, syncCartCount)
+      window.clearTimeout(syncTimer)
+      window.removeEventListener('focus', syncCartFromStorage)
+      window.removeEventListener('storage', syncCartFromStorage)
+      window.removeEventListener(PUBLIC_CART_EVENT, syncCartFromStorage)
     }
-  }, [])
+  }, [syncCartFromStorage])
 
-  const products = catalog.products
-  const featuredProducts = useMemo(() => products.slice(0, 8), [products])
-  const guideProducts = useMemo(() => products.slice(0, 5), [products])
-  const tipProducts = useMemo(() => products.slice(0, 3), [products])
-  const heroProduct = featuredProducts[0] ?? null
-  const promoProduct = featuredProducts[2] ?? heroProduct
+  useEffect(() => {
+    if (!pageRef.current) return undefined
+    const elements = pageRef.current.querySelectorAll('.eloise-reveal')
+    if (elements.length === 0) return undefined
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return
+          entry.target.classList.add('visible')
+          observer.unobserve(entry.target)
+        })
+      },
+      { threshold: 0.1 },
+    )
+    elements.forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [catalog.products.length, loading])
 
-  const formatMoney = (value) => formatCurrency(value, catalog.currency)
+  useEffect(() => {
+    if (!profileOpen) return undefined
+    const handlePointerDown = (event) => {
+      if (!profilePanelRef.current) return
+      if (profilePanelRef.current.contains(event.target)) return
+      setProfileOpen(false)
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => window.removeEventListener('pointerdown', handlePointerDown)
+  }, [profileOpen])
 
-  const scrollToSection = (sectionId) => {
+  useEffect(() => {
+    if (!latestOrder) return undefined
+    const timer = window.setInterval(() => setTrackingNow(Date.now()), 15000)
+    return () => window.clearInterval(timer)
+  }, [latestOrder])
+
+  const menuTabs = useMemo(() => {
+    const fromCatalog = Array.isArray(catalog.categories)
+      ? catalog.categories.filter((item) => String(item?.id ?? '') !== 'all')
+      : []
+    if (fromCatalog.length > 0) {
+      return [{ id: 'all', name: 'All Items' }, ...fromCatalog.map((item) => ({ id: item.id, name: item.name }))]
+    }
+
+    const fallbackMap = new Map()
+    catalog.products.forEach((product) => {
+      const id = String(product.category ?? '').trim()
+      if (!id) return
+      if (!fallbackMap.has(id)) fallbackMap.set(id, id.charAt(0).toUpperCase() + id.slice(1))
+    })
+    return [{ id: 'all', name: 'All Items' }, ...Array.from(fallbackMap.entries()).map(([id, name]) => ({ id, name }))]
+  }, [catalog.categories, catalog.products])
+
+  const resolvedActiveCategory = menuTabs.some((tab) => tab.id === activeCategory)
+    ? activeCategory
+    : 'all'
+
+  const filteredProducts = useMemo(() => {
+    if (resolvedActiveCategory === 'all') return catalog.products
+    return catalog.products.filter((product) => String(product.category ?? '') === resolvedActiveCategory)
+  }, [resolvedActiveCategory, catalog.products])
+
+  const heroProduct = catalog.products[0] ?? null
+  const menuCount = catalog.products.length
+  const happyCustomerCount = Math.max(19, menuCount)
+  const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
+  const formatMoney = (amount) => formatCurrency(amount, catalog.currency)
+  const resolvedTaxRate = Number.isFinite(Number(catalog.taxRate))
+    ? Math.max(0, Number(catalog.taxRate)) / 100
+    : 0.1
+  const subtotal = cartLines.reduce(
+    (sum, line) => sum + Number(line.product?.basePrice ?? 0) * line.quantity,
+    0,
+  )
+  const taxAmount = subtotal * resolvedTaxRate
+  const totalAmount = subtotal + taxAmount
+  const roundedTotalAmount = Number(totalAmount.toFixed(2))
+  const hasStaticKhqr = Boolean(paymentConfig?.khqr?.enabled && paymentConfig?.khqr?.qr)
+  const isLocatingAddress = profileLocating || locationResolving
+  const trackingElapsedMinutes = latestOrder
+    ? Math.max(0, Math.floor((trackingNow - Number(latestOrder.placedAt ?? 0)) / 60000))
+    : 0
+  const trackingStage =
+    trackingElapsedMinutes >= 35
+      ? 3
+      : trackingElapsedMinutes >= 20
+        ? 2
+        : trackingElapsedMinutes >= 8
+          ? 1
+          : 0
+  const trackingEtaMinutes = latestOrder
+    ? Math.max(0, Number(latestOrder.etaMinutes ?? 35) - trackingElapsedMinutes)
+    : 0
+  const checkoutButtonLabel =
+    !customerSession?.id
+      ? 'Login Required'
+      : placingOrder
+        ? 'Placing Order...'
+        : paymentMethod === 'Cash'
+          ? 'Place Cash on Delivery Order'
+          : paymentMethod === 'KHQR'
+            ? 'Place KHQR Order'
+            : 'Place Order'
+  const visibleNavLinks = checkoutPage ? [{ href: '/', label: 'Website' }] : NAV_LINKS
+
+  const openCheckoutPage = () => {
     if (typeof window === 'undefined') return
-    const element = document.getElementById(sectionId)
-    if (!element) return
-    element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    window.history.replaceState(null, '', `#${sectionId}`)
+    if (window.location.pathname.toLowerCase().startsWith('/cart')) return
+    window.location.assign('/cart')
   }
 
-  const handleNavClick = (event, sectionId) => {
-    event.preventDefault()
-    setMobileMenuOpen(false)
-    setAboutMenuOpen(false)
-    scrollToSection(sectionId)
+  const openHomePage = () => {
+    if (typeof window === 'undefined') return
+    if (window.location.pathname === '/') return
+    window.location.assign('/')
   }
 
-  const handleAddToCart = (product) => {
-    const stockQty = normalizePositiveInteger(product?.stockQty)
-    if (!product?.id || stockQty <= 0) return
-    const nextCart = addPublicCartItem(product.id, 1, { maxQty: stockQty })
-    const nextCount = nextCart.reduce((sum, line) => sum + line.quantity, 0)
-    setCartCount(nextCount)
+  const openCustomerAuthPage = () => {
+    if (typeof window === 'undefined') return
+    window.location.assign('/account')
+  }
+
+  const handleProfileButtonClick = () => {
+    if (!customerSession?.id) {
+      openCustomerAuthPage()
+      return
+    }
+    setProfileOpen((previous) => !previous)
+    setProfileError('')
+    setProfileSuccess('')
+  }
+
+  const handleSaveProfile = async () => {
+    if (!customerSession?.id || profileSaving) return
+    setProfileSaving(true)
+    setProfileError('')
+    setProfileSuccess('')
+    try {
+      const payload = await updatePublicCustomerProfile({
+        fullName: profileFullName.trim(),
+        email: profileEmail.trim(),
+        phone: profilePhone.trim(),
+        address: profileAddress.trim(),
+      })
+      const nextCustomer = payload?.customer ?? null
+      if (nextCustomer) {
+        setCustomerSession(nextCustomer)
+      }
+      setProfileSuccess('Profile updated.')
+    } catch (requestError) {
+      setProfileError(String(requestError?.message || 'Unable to update profile.'))
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  const handleSignOutProfile = async () => {
+    try {
+      await logoutPublicCustomer()
+    } finally {
+      setCustomerSession(null)
+      setCustomerReady(true)
+      setProfileOpen(false)
+    }
+  }
+
+  const applySavedAddress = (key) => {
+    const next = String(savedAddresses?.[key] ?? '').trim()
+    if (!next) {
+      setProfileError(`No ${key} address saved yet.`)
+      setProfileSuccess('')
+      return
+    }
+    setProfileAddress(next)
+    setProfileError('')
+    setProfileSuccess(`${key === 'home' ? 'Home' : 'Work'} address applied.`)
+  }
+
+  const saveAddressPreset = (key) => {
+    const address = profileAddress.trim()
+    if (!address) {
+      setProfileError('Enter an address before saving preset.')
+      setProfileSuccess('')
+      return
+    }
+    const next = {
+      ...savedAddresses,
+      [key]: address,
+    }
+    setSavedAddresses(next)
+    writeAddressBook(next)
+    setProfileError('')
+    setProfileSuccess(`${key === 'home' ? 'Home' : 'Work'} address saved.`)
+  }
+
+  const resolveAddressFromCoordinates = async (coordinates, options = {}) => {
+    const lat = Number(coordinates?.lat)
+    const lng = Number(coordinates?.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+    const normalized = {
+      lat: Number(lat.toFixed(6)),
+      lng: Number(lng.toFixed(6)),
+    }
+    const googleMapLink = `https://www.google.com/maps?q=${normalized.lat},${normalized.lng}`
+    const successMessage = String(options.successMessage ?? 'Location selected.')
+
+    setLocationResolving(true)
+    setProfileError('')
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${normalized.lat}&lon=${normalized.lng}&zoom=18&addressdetails=1`,
+      )
+      if (!response.ok) {
+        throw new Error(`Address lookup failed (${response.status}).`)
+      }
+      const payload = await response.json()
+      const displayName = String(payload?.display_name ?? '').trim()
+      if (displayName) {
+        setProfileAddress(`${displayName} (${googleMapLink})`)
+      } else {
+        setProfileAddress(`Near ${normalized.lat}, ${normalized.lng} (${googleMapLink})`)
+      }
+      setProfileSuccess(successMessage)
+    } catch {
+      setProfileAddress(`Near ${normalized.lat}, ${normalized.lng} (${googleMapLink})`)
+      setProfileError('Address lookup is unavailable right now, but coordinates were captured.')
+    } finally {
+      setLocationResolving(false)
+    }
+  }
+
+  const handleMapPick = (coordinates) => {
+    const lat = Number(coordinates?.lat)
+    const lng = Number(coordinates?.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    const normalized = {
+      lat: Number(lat.toFixed(6)),
+      lng: Number(lng.toFixed(6)),
+    }
+    setSelectedCoordinates(normalized)
+    void resolveAddressFromCoordinates(normalized, { successMessage: 'Map pin updated.' })
+  }
+
+  const handleDetectCurrentLocation = () => {
+    if (profileLocating) return
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setProfileError('Current location is not available in this browser.')
+      return
+    }
+    setProfileLocating(true)
+    setProfileError('')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const coordinates = {
+          lat: Number(Number(position?.coords?.latitude ?? 0).toFixed(6)),
+          lng: Number(Number(position?.coords?.longitude ?? 0).toFixed(6)),
+        }
+        setSelectedCoordinates(coordinates)
+        void resolveAddressFromCoordinates(coordinates, { successMessage: 'Current location detected.' })
+        setProfileLocating(false)
+      },
+      (error) => {
+        setProfileError(error?.message || 'Unable to detect current location.')
+        setProfileLocating(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+      },
+    )
+  }
+
+  const handleAddToCart = (productId, stockQty) => {
+    const safeId = String(productId ?? '').trim()
+    const maxQty = normalizePositiveInteger(stockQty)
+    if (!safeId || maxQty <= 0) return
+    addPublicCartItem(safeId, 1, { maxQty })
+    syncCartFromStorage()
+    setCheckoutError('')
+    setCheckoutSuccess('')
+    setAddedState((previous) => ({ ...previous, [safeId]: true }))
+    window.setTimeout(() => {
+      setAddedState((previous) => {
+        const next = { ...previous }
+        delete next[safeId]
+        return next
+      })
+    }, 1400)
+  }
+
+  const updateCartLineQuantity = (productId, delta) => {
+    const safeId = String(productId ?? '').trim()
+    if (!safeId) return
+    const product = catalog.products.find((item) => String(item.id) === safeId)
+    const maxQty = normalizePositiveInteger(product?.stockQty)
+    if (!product || maxQty <= 0) return
+
+    const currentRaw = readPublicCart()
+    const nextRaw = []
+    let found = false
+    currentRaw.forEach((line) => {
+      if (String(line.productId) !== safeId) {
+        nextRaw.push(line)
+        return
+      }
+      found = true
+      const nextQty = Math.max(0, Math.min(maxQty, normalizePositiveInteger(line.quantity) + delta))
+      if (nextQty > 0) {
+        nextRaw.push({ productId: safeId, quantity: nextQty })
+      }
+    })
+    if (!found && delta > 0) {
+      nextRaw.push({ productId: safeId, quantity: 1 })
+    }
+    writePublicCart(nextRaw)
+    syncCartFromStorage()
+    setCheckoutError('')
+    setCheckoutSuccess('')
+  }
+
+  const removeCartLine = (productId) => {
+    const safeId = String(productId ?? '').trim()
+    if (!safeId) return
+    const nextRaw = readPublicCart().filter((line) => String(line.productId) !== safeId)
+    writePublicCart(nextRaw)
+    syncCartFromStorage()
+    setCheckoutError('')
+    setCheckoutSuccess('')
+  }
+
+  const submitPublicOrder = async (selectedMethod) => {
+    const safeName = customerName.trim()
+    const response = await createPublicOrder({
+      customerName: safeName,
+      phone: customerPhone.trim(),
+      address: profileAddress.trim(),
+      note: customerNote.trim(),
+      paymentMethod: selectedMethod,
+      items: cartLines.map((line) => ({
+        productId: line.product.id,
+        quantity: line.quantity,
+      })),
+    })
+    writePublicCart([])
+    syncCartFromStorage()
+    setCheckoutSuccess(
+      `Order ${String(response?.orderNumber ?? 'N/A')} submitted with ${selectedMethod} payment.`,
+    )
+    setLatestOrder({
+      orderNumber: String(response?.orderNumber ?? 'N/A'),
+      paymentMethod: selectedMethod,
+      placedAt: Date.now(),
+      etaMinutes: 35,
+    })
+    setCustomerName('')
+    setCustomerPhone('')
+    setCustomerNote('')
+    setPaymentMethod('Cash')
+  }
+
+  const handleCheckout = async () => {
+    if (placingOrder) return
+    if (!customerSession?.id) {
+      setCheckoutError('Please login with phone number or Gmail before checkout.')
+      return
+    }
+    if (cartLines.length === 0) {
+      setCheckoutError('Your cart is empty.')
+      return
+    }
+    const safeName = customerName.trim()
+    if (!safeName) {
+      setCheckoutError('Customer name is required.')
+      return
+    }
+
+    if (paymentMethod === 'KHQR' && !hasStaticKhqr) {
+      setCheckoutError('KHQR is not configured yet. Please choose Cash on Delivery.')
+      return
+    }
+
+    setPlacingOrder(true)
+    setCheckoutError('')
+    setCheckoutSuccess('')
+    try {
+      await submitPublicOrder(paymentMethod)
+    } catch (requestError) {
+      setCheckoutError(String(requestError?.message || 'Unable to process payment.'))
+    } finally {
+      setPlacingOrder(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#f6f8fc_0%,#eff3fa_100%)] text-slate-800">
-      <div className="mx-auto min-h-screen w-full max-w-7xl">
-        <header
-          id="home"
-          className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 py-4 backdrop-blur md:px-7"
-        >
-          <a href="/" className="flex items-center gap-2 text-slate-900">
-            <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-[#2d71f8] text-white shadow-[0_8px_18px_rgba(45,113,248,0.28)]">
-              <Coffee size={18} />
-            </div>
-            <div className="leading-tight">
-              <p className="text-sm font-bold">Grill & Coffee</p>
-              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Cambodia</p>
-            </div>
+    <div className="eloise-page" ref={pageRef}>
+      <nav className="eloise-nav">
+        <div className="eloise-nav-container">
+          <a href={checkoutPage ? '/' : '#top'} className="eloise-nav-logo">
+            <span>Eloise</span> Coffee
           </a>
-
-          <nav className="hidden items-center gap-6 text-sm font-semibold text-slate-700 lg:flex">
-            {MAIN_NAV.map((item) => (
-              <a
-                key={item.id}
-                href={`#${item.id}`}
-                onClick={(event) => handleNavClick(event, item.id)}
-                className="transition-colors hover:text-[#2d71f8]"
-              >
-                {item.label}
-              </a>
+          <ul className="eloise-nav-links">
+            {visibleNavLinks.map((item) => (
+              <li key={item.href}>
+                <a href={item.href}>{item.label}</a>
+              </li>
             ))}
-            <div className="relative" ref={aboutMenuRef}>
-              <button
-                onClick={() => setAboutMenuOpen((open) => !open)}
-                className={`ui-btn rounded-lg border px-3 py-2 text-sm ${
-                  aboutMenuOpen
-                    ? 'border-[#2d71f8] bg-[#2d71f8]/10 text-[#2d71f8]'
-                    : 'border-slate-200 bg-white text-slate-700'
-                }`}
-              >
-                About <ChevronDown size={15} />
-              </button>
-              {aboutMenuOpen && (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-[290px] rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_36px_rgba(15,23,42,0.12)]">
-                  {ABOUT_NAV.map((item) => (
-                    <a
-                      key={item.id}
-                      href={`#${item.id}`}
-                      onClick={(event) => handleNavClick(event, item.id)}
-                      className="block rounded-lg px-3 py-2.5 hover:bg-slate-50"
-                    >
-                      <p className="text-sm font-semibold text-slate-800">{item.label}</p>
-                      <p className="text-xs text-slate-500">{item.desc}</p>
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          </nav>
-
-          <div className="flex items-center gap-2">
-            <a
-              href="/order"
-              title="Cart"
-              className="ui-btn ui-btn-ghost ui-icon-btn relative h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-700"
+          </ul>
+          <button
+            className="eloise-nav-menu-btn"
+            type="button"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+            aria-expanded={mobileMenuOpen}
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? 'Close' : 'Menu'}
+          </button>
+          <div className="eloise-nav-actions">
+            <button
+              type="button"
+              className="eloise-nav-cart-btn"
+              onClick={checkoutPage ? openHomePage : openCheckoutPage}
+              aria-label={checkoutPage ? 'Back to website' : 'Go to checkout page'}
             >
               <ShoppingCart size={16} />
-              <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#f43f5e] px-1 text-[10px] font-bold text-white">
-                {cartCount}
-              </span>
-            </a>
-            <a href="#contact" onClick={(event) => handleNavClick(event, 'contact')} className="hidden text-sm font-semibold text-slate-600 md:inline">
-              Login
-            </a>
-            <a href="/order" className="ui-btn ui-btn-primary rounded-full px-4 py-2 text-sm">
-              Start Order
-            </a>
-            <button
-              onClick={() => setMobileMenuOpen((open) => !open)}
-              className="ui-btn ui-btn-ghost ui-icon-btn rounded-full border border-slate-200 bg-white text-slate-700 lg:hidden"
-            >
-              <Menu size={17} />
+              <span className="eloise-nav-cart-count">{cartCount}</span>
             </button>
-          </div>
-        </header>
-
-        {mobileMenuOpen && (
-          <div className="border-b border-slate-200 bg-white px-4 py-3 md:px-7 lg:hidden">
-            <nav className="grid grid-cols-2 gap-2">
-              {MAIN_NAV.map((item) => (
-                <a
-                  key={`mobile-main-${item.id}`}
-                  href={`#${item.id}`}
-                  onClick={(event) => handleNavClick(event, item.id)}
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700"
-                >
-                  {item.label}
-                </a>
-              ))}
-              {ABOUT_NAV.map((item) => (
-                <a
-                  key={`mobile-about-${item.id}`}
-                  href={`#${item.id}`}
-                  onClick={(event) => handleNavClick(event, item.id)}
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700"
-                >
-                  {item.label}
-                </a>
-              ))}
-            </nav>
-          </div>
-        )}
-
-        <section className="grid grid-cols-1 gap-6 px-4 pb-8 pt-7 md:px-7 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <div>
-            <p className="inline-flex items-center gap-1 rounded-full bg-[#2d71f8]/10 px-3 py-1 text-xs font-semibold text-[#2d71f8]">
-              <Sparkles size={13} />
-              Cambodia&apos;s premium coffee store
-            </p>
-            <h1 className="mt-3 max-w-xl text-4xl font-black leading-tight text-slate-900 md:text-[52px]">
-              Fresh & Strong Coffee
-              <br />
-              for Your Daily Ritual
-            </h1>
-            <p className="mt-4 max-w-xl text-base leading-8 text-slate-600">
-              Premium quality coffee in all roast profiles, from mellow to bold. Delivered quickly to your door in Cambodia.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a href="/order" className="ui-btn ui-btn-primary rounded-full px-5 py-3 text-sm font-semibold">
-                Shop Now
-                <ArrowRight size={14} />
-              </a>
-              <a href="#shop" onClick={(event) => handleNavClick(event, 'shop')} className="ui-btn ui-btn-secondary rounded-full px-5 py-3 text-sm font-semibold">
-                View All Products
-              </a>
-            </div>
-            <div className="mt-6 flex flex-wrap items-center gap-5 text-sm">
-              <div>
-                <p className="text-3xl font-black text-slate-900">2K+</p>
-                <p className="text-slate-500">Happy Customers</p>
-              </div>
-              <div className="h-8 w-px bg-slate-200" />
-              <div>
-                <p className="text-3xl font-black text-slate-900">{products.length || 8}</p>
-                <p className="text-slate-500">Products</p>
-              </div>
-              <div className="h-8 w-px bg-slate-200" />
-              <div>
-                <p className="text-3xl font-black text-slate-900">4.9</p>
-                <p className="text-slate-500">Avg Rating</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 rounded-[26px] bg-[linear-gradient(135deg,#dce8ff_0%,#e8e0ff_100%)]" />
-            <div className="relative rounded-[26px] border border-slate-200 bg-white/80 p-4 shadow-[0_16px_36px_rgba(15,23,42,0.14)]">
-              <div className="overflow-hidden rounded-[18px] bg-slate-100">
-                {heroProduct ? (
-                  <img src={heroProduct.image} alt={heroProduct.name} className="h-[320px] w-full object-cover" />
-                ) : (
-                  <div className="flex h-[320px] items-center justify-center text-sm text-slate-500">Hero image</div>
+            <button
+              type="button"
+              className={`eloise-nav-profile-btn ${customerSession?.id ? 'logged-in' : ''}`}
+              onClick={handleProfileButtonClick}
+              aria-label={customerSession?.id ? 'Account profile' : 'Login'}
+              aria-expanded={profileOpen}
+            >
+              {customerSession ? <User size={14} /> : <LogIn size={14} />}
+            </button>
+            {customerSession?.id && (
+              <>
+                {profileOpen && (
+                  <div
+                    className="eloise-profile-overlay"
+                    onClick={() => setProfileOpen(false)}
+                  />
                 )}
-              </div>
-              <div className="absolute right-5 top-5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                <p className="text-[#ea580c]">Same-Day</p>
-                <p>Phnom Penh</p>
-              </div>
-              <div className="absolute bottom-5 left-5 rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm">
-                <p className="text-[#1c8370]">Eco-Friendly</p>
-                <p>Roast options</p>
-              </div>
-            </div>
-          </div>
-        </section>
+                <section className={`eloise-profile-drawer ${profileOpen ? 'open' : ''}`} ref={profilePanelRef}>
+                  <header className="eloise-profile-header">
+                    <div>
+                      <p>Account</p>
+                      <h4>{profileFullName || customerSession.fullName || 'Customer'}</h4>
+                    </div>
+                    <button type="button" className="eloise-profile-close" onClick={() => setProfileOpen(false)}>
+                      <X size={20} />
+                    </button>
+                  </header>
 
-        <section className="grid grid-cols-1 gap-3 px-4 pb-8 md:px-7 sm:grid-cols-2 lg:grid-cols-4">
-          {INFO_TILES.map((tile) => {
-            const Icon = tile.icon
-            return (
-              <article key={tile.title} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className={`mb-2 inline-flex rounded-full p-2 ${tile.tone}`}>
-                  <Icon size={16} />
-                </div>
-                <p className="text-sm font-semibold text-slate-800">{tile.title}</p>
-                <p className="mt-1 text-xs leading-6 text-slate-500">{tile.text}</p>
-              </article>
-            )
-          })}
-        </section>
+                <div className="eloise-profile-content">
+                  <div className="eloise-profile-form">
+                    <label>
+                      Full Name
+                      <input
+                        type="text"
+                        value={profileFullName}
+                        onChange={(event) => setProfileFullName(event.target.value)}
+                        placeholder="Your full name"
+                      />
+                    </label>
+                    <label>
+                      Email Address
+                      <input
+                        type="email"
+                        value={profileEmail}
+                        onChange={(event) => setProfileEmail(event.target.value)}
+                        placeholder="name@gmail.com"
+                      />
+                    </label>
+                    <label>
+                      Phone Number
+                      <input
+                        type="text"
+                        value={profilePhone}
+                        onChange={(event) => setProfilePhone(event.target.value)}
+                        placeholder="Phone number"
+                      />
+                    </label>
+                    <label>
+                      Delivery Address
+                      <textarea
+                        rows={3}
+                        value={profileAddress}
+                        onChange={(event) => setProfileAddress(event.target.value)}
+                        placeholder="Street, Building, Apartment..."
+                      />
+                    </label>
+                    
+                    <div className="eloise-address-presets-v2">
+                      <div className="preset-item">
+                        <Home size={14} />
+                        <span>Home</span>
+                        <div className="preset-actions">
+                          <button type="button" onClick={() => applySavedAddress('home')}>Apply</button>
+                          <button type="button" className="save" onClick={() => saveAddressPreset('home')}>Set</button>
+                        </div>
+                      </div>
+                      <div className="preset-item">
+                        <Briefcase size={14} />
+                        <span>Work</span>
+                        <div className="preset-actions">
+                          <button type="button" onClick={() => applySavedAddress('work')}>Apply</button>
+                          <button type="button" className="save" onClick={() => saveAddressPreset('work')}>Set</button>
+                        </div>
+                      </div>
+                    </div>
 
-        <section id="shop" className="border-t border-slate-200 bg-[#f3f5fa] px-4 py-10 md:px-7">
-          <div className="mb-5 flex items-end justify-between">
-            <div>
-              <h2 className="text-3xl font-black text-slate-900">Featured Products</h2>
-              <p className="text-sm text-slate-500">Best-selling products loved by Cambodian families</p>
-            </div>
-            <a href="/order" className="text-sm font-semibold text-[#2d71f8]">
-              View all
-            </a>
-          </div>
-          {loading && (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-              Loading products...
-            </div>
-          )}
-          {!loading && error && (
-            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-600">
-              {error}
-            </div>
-          )}
-          {!loading && !error && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {featuredProducts.map((product, index) => (
-                <article key={product.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <div className="relative aspect-[4/3] bg-slate-100">
-                    <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
-                    <span className="absolute left-2 top-2 rounded-full bg-[#2d71f8]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2d71f8]">
-                      {index === 0 ? 'Best Seller' : index === 1 ? 'Popular' : 'Top Rated'}
-                    </span>
-                  </div>
-                  <div className="p-3">
-                    <p className="text-xs text-[#f59e0b]">★★★★★ <span className="text-slate-400">({ratingByIndex(index)})</span></p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{product.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{product.label}</p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <p className="text-lg font-bold text-[#2d71f8]">{formatMoney(product.basePrice)}</p>
+                    <div className="eloise-profile-map-section">
                       <button
-                        onClick={() => handleAddToCart(product)}
-                        disabled={normalizePositiveInteger(product.stockQty) <= 0}
-                        className="ui-btn ui-btn-primary rounded-full px-3 py-1.5 text-xs disabled:bg-slate-300 disabled:shadow-none"
+                        type="button"
+                        className={`eloise-map-trigger ${profileMapOpen ? 'active' : ''}`}
+                        onClick={() => setProfileMapOpen((open) => !open)}
                       >
-                        {normalizePositiveInteger(product.stockQty) <= 0 ? 'Sold Out' : 'Add to Cart'}
+                        <MapPin size={14} />
+                        <span>{profileMapOpen ? 'Close Map Picker' : 'Pick Location on Map'}</span>
                       </button>
+
+                      {profileMapOpen && (
+                        <div className="eloise-map-container-v2">
+                          <Suspense fallback={<div className="eloise-map-loading">Loading map...</div>}>
+                            <LeafletAddressPicker coordinates={selectedCoordinates} onPickCoordinates={handleMapPick} />
+                          </Suspense>
+                          <div className="map-hint">Drag or tap to set exact coordinates</div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="border-t border-slate-200 bg-white px-4 py-10 md:px-7">
-          <h3 className="text-center text-3xl font-black text-slate-900">Coffee Size Guide</h3>
-          <p className="mt-1 text-center text-sm text-slate-500">Choose the right cup size for your comfort</p>
-          <div className="mx-auto mt-6 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-5">
-            {guideProducts.map((product, index) => (
-              <article key={`guide-${product.id}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-                <div className="mx-auto mb-2 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white text-lg font-bold text-[#2d71f8]">
-                  {['S', 'M', 'L', 'XL', 'XXL'][index] ?? 'S'}
                 </div>
-                <p className="text-sm font-semibold text-slate-800">{formatMoney(product.basePrice)}</p>
-                <p className="text-xs text-slate-500">{product.name.split(' ').slice(0, 2).join(' ')}</p>
-              </article>
-            ))}
-          </div>
-        </section>
 
-        <section id="story" className="border-t border-slate-200 bg-[#2355db] px-4 py-12 text-white md:px-7">
-          <div className="grid grid-cols-1 items-center gap-6 lg:grid-cols-[1fr_340px]">
-            <div>
-              <h3 className="text-4xl font-black">Why Choose Grill & Coffee?</h3>
-              <p className="mt-4 max-w-2xl text-white/85">
-                We are Cambodia&apos;s trusted online coffee store. Our products meet international quality standards and are crafted for daily satisfaction.
-              </p>
-              <div className="mt-5 space-y-2 text-sm text-white/90">
-                <p className="inline-flex items-center gap-2"><CheckCircle2 size={15} /> Quality-tested and consistent flavor</p>
-                <p className="inline-flex items-center gap-2"><CheckCircle2 size={15} /> Multiple roast profiles and sizes</p>
-                <p className="inline-flex items-center gap-2"><CheckCircle2 size={15} /> Cash and digital payment options</p>
-                <p className="inline-flex items-center gap-2"><CheckCircle2 size={15} /> Fast delivery across Cambodia</p>
-              </div>
-              <a href="/order" className="ui-btn mt-6 rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2355db]">
-                Shop Now
-                <ArrowRight size={14} />
-              </a>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-white/25 bg-white/10">
-              {promoProduct ? (
-                <img src={promoProduct.image} alt={promoProduct.name} className="h-[260px] w-full object-cover" />
-              ) : (
-                <div className="flex h-[260px] items-center justify-center text-sm text-white/80">Preview image</div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="border-t border-slate-200 bg-[#f3f5fa] px-4 py-12 md:px-7">
-          <h3 className="text-center text-4xl font-black text-slate-900">What Customers Say</h3>
-          <p className="mt-2 text-center text-sm text-slate-500">Real reviews from coffee buyers in Cambodia</p>
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {TESTIMONIALS.map((item) => (
-              <article key={item.name} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-[#f59e0b]">★★★★★</p>
-                <p className="mt-2 text-sm leading-7 text-slate-600">&quot;{item.quote}&quot;</p>
-                <div className="mt-4 flex items-center gap-2">
-                  <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2d71f8] text-xs font-bold text-white">
-                    {item.badge}
+                <footer className="eloise-profile-footer">
+                  <div className="action-row">
+                    <button type="button" className="detect-btn" onClick={handleDetectCurrentLocation} disabled={isLocatingAddress}>
+                      {isLocatingAddress ? <Loader2 size={14} className="eloise-spin" /> : <Crosshair size={14} />}
+                      <span>Locate Me</span>
+                    </button>
+                    <button type="button" className="save-btn" onClick={handleSaveProfile} disabled={profileSaving}>
+                      {profileSaving ? <Loader2 size={14} className="eloise-spin" /> : <CheckCircle2 size={14} />}
+                      <span>Update Profile</span>
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                    <p className="text-xs text-slate-500">{item.location}</p>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+                  <button type="button" className="logout-btn" onClick={handleSignOutProfile}>
+                    <LogOut size={14} />
+                    <span>Sign Out</span>
+                  </button>
+                </footer>
 
-        <section className="border-t border-slate-200 bg-white px-4 py-10 md:px-7">
-          <div className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#eef3ff_0%,#f4f7ff_100%)] p-8 text-center">
-            <h3 className="text-4xl font-black text-slate-900">Ready to Order?</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Browse premium coffee and place your order in minutes.
-            </p>
-            <a href="/order" className="ui-btn ui-btn-primary mt-5 rounded-full px-5 py-3 text-sm">
-              Start Shopping
+                {profileError && <div className="eloise-status-msg error">{profileError}</div>}
+                {profileSuccess && <div className="eloise-status-msg success">{profileSuccess}</div>}
+                </section>
+              </>
+            )}
+          </div>
+        </div>
+      </nav>
+      {mobileMenuOpen && (
+        <div className="eloise-mobile-menu">
+          {visibleNavLinks.map((item) => (
+            <a
+              key={`mobile-${item.href}`}
+              href={item.href}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              {item.label}
             </a>
-          </div>
-        </section>
+          ))}
+          <button
+            type="button"
+            className="eloise-mobile-order"
+            onClick={() => {
+              setMobileMenuOpen(false)
+              if (checkoutPage) {
+                openHomePage()
+                return
+              }
+              openCheckoutPage()
+            }}
+          >
+            <ArrowRight size={14} />
+            <span>{checkoutPage ? 'Back to Website' : `Go to Checkout (${cartCount})`}</span>
+          </button>
+          <button
+            type="button"
+            className="eloise-mobile-order"
+            onClick={() => {
+              setMobileMenuOpen(false)
+              handleProfileButtonClick()
+            }}
+          >
+            {customerSession?.id ? <UserRound size={14} /> : <LogIn size={14} />}
+            <span>{customerSession?.id ? 'Profile' : 'Login / Register'}</span>
+          </button>
+        </div>
+      )}
 
-        <section id="tips" className="border-t border-slate-200 bg-[#f3f5fa] px-4 py-10 md:px-7">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h3 className="text-3xl font-black text-slate-900">Coffee Tips & Guides</h3>
-              <p className="text-sm text-slate-500">Practical content for better coffee choices</p>
-            </div>
-            <a href="#blog" onClick={(event) => handleNavClick(event, 'blog')} className="text-sm font-semibold text-[#2d71f8]">
-              All articles
+      {!checkoutPage && (
+      <section className="eloise-hero" id="top">
+        <div className="eloise-hero-text">
+          <div className="eloise-hero-tag">Est. 2024 · Specialty Coffee</div>
+          <h1>
+            Every Cup
+            <br />
+            is a <em>Story</em>
+            <br />
+            Worth Sipping
+          </h1>
+          <p>
+            Artisan coffee crafted with passion, seasonal pastries baked fresh daily, and a corner of the world made just for you.
+          </p>
+          <div className="eloise-hero-actions">
+            <a href="#menu" className="eloise-btn-primary">
+              <span>Explore Menu</span>
+              <ArrowRight size={14} />
             </a>
-          </div>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {tipProducts.map((product, index) => (
-              <article key={`tip-${product.id}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="aspect-[4/2.1] bg-slate-100">
-                  <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
-                </div>
-                <div className="p-4">
-                  <p className="inline-flex items-center gap-1 rounded-full bg-[#2d71f8]/10 px-2 py-0.5 text-[11px] font-semibold text-[#2d71f8]">
-                    <BookOpenText size={12} />
-                    {index === 0 ? 'Roast Guide' : index === 1 ? 'Brewing Tips' : 'Coffee Care'}
-                  </p>
-                  <h4 className="mt-2 text-base font-bold text-slate-900">
-                    {index === 0
-                      ? 'How to Choose the Right Roast for Your Taste'
-                      : index === 1
-                        ? 'Why Freshly Ground Coffee Improves Your Cup'
-                        : '7 Tips to Store Coffee Beans Correctly'}
-                  </h4>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    {index === 0
-                      ? 'Learn the differences between light, medium, and dark roasts in a simple guide.'
-                      : index === 1
-                        ? 'Understand grind size, water temperature, and timing for daily brewing.'
-                        : 'Avoid stale flavor with simple storage and handling routines.'}
-                  </p>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                    <span>{index === 1 ? 'Mony Kea' : 'Sokha Chan'}</span>
-                    <span>{index === 0 ? '5 min read' : index === 1 ? '4 min read' : '6 min read'}</span>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section id="blog" className="border-t border-slate-200 bg-white px-4 py-10 md:px-7">
-          <div className="rounded-2xl bg-[linear-gradient(135deg,#2d71f8_0%,#4338ca_100%)] p-6 text-white md:p-8">
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr]">
-              <div>
-                <p className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
-                  <CircleUserRound size={13} />
-                  Our Story
-                </p>
-                <h3 className="mt-3 text-3xl font-black">Cambodia&apos;s Trusted Coffee Brand</h3>
-                <p className="mt-3 text-white/85">
-                  Built in Phnom Penh with a simple mission: reliable quality coffee, fair pricing, and easy digital ordering.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2 text-sm">
-                  <span className="rounded-lg bg-white/10 px-3 py-2">2,000+ Happy Customers</span>
-                  <span className="rounded-lg bg-white/10 px-3 py-2">4.9 Avg Rating</span>
-                  <span className="rounded-lg bg-white/10 px-3 py-2">25 Provinces Served</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <article className="rounded-xl bg-white/10 p-3">
-                  <p className="text-sm font-semibold">Quality Tested</p>
-                  <p className="mt-1 text-xs text-white/80">Consistent roast and flavor profile.</p>
-                </article>
-                <article className="rounded-xl bg-white/10 p-3">
-                  <p className="text-sm font-semibold">Eco Options</p>
-                  <p className="mt-1 text-xs text-white/80">Sustainable packaging options available.</p>
-                </article>
-                <article className="rounded-xl bg-white/10 p-3">
-                  <p className="text-sm font-semibold">Fast Delivery</p>
-                  <p className="mt-1 text-xs text-white/80">Same-day in Phnom Penh.</p>
-                </article>
-                <article className="rounded-xl bg-white/10 p-3">
-                  <p className="text-sm font-semibold">24/7 Support</p>
-                  <p className="mt-1 text-xs text-white/80">Always here to help with orders.</p>
-                </article>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="faq" className="border-t border-slate-200 bg-[#f5f1fb] px-4 py-10 md:px-7">
-          <div className="mx-auto max-w-xl text-center">
-            <p className="inline-flex items-center gap-1 text-sm font-semibold text-[#2d71f8]">
-              <MessageCircleHeart size={15} />
-              Stay Updated
-            </p>
-            <h3 className="mt-2 text-3xl font-black text-slate-900">Subscribe for Offers & Tips</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Get coffee brewing tips, exclusive deals, and product alerts in your inbox.
-            </p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <input
-                type="email"
-                placeholder="Your email address"
-                className="ui-input flex-1 rounded-xl px-4 py-2.5 text-sm"
-              />
-              <button className="ui-btn ui-btn-primary rounded-xl px-5 py-2.5 text-sm">
-                Subscribe
-              </button>
-            </div>
-            <p className="mt-3 text-xs text-slate-500">No spam. Unsubscribe anytime.</p>
-          </div>
-        </section>
-
-        <div className="bg-[#2d71f8] px-4 py-3 text-white md:px-7">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <p className="inline-flex items-center gap-2 font-semibold">
-              <Leaf size={14} />
-              Free shipping on orders over $25 across Cambodia
-            </p>
-            <a href="/order" className="ui-btn rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#2d71f8]">
-              Shop Now
+            <a href="#about" className="eloise-btn-ghost">
+              <span>Our Story</span>
               <ArrowRight size={14} />
             </a>
           </div>
         </div>
+        <div className="eloise-hero-visual">
+          <div className="eloise-hero-img-wrap">
+            <div className="eloise-hero-img-bg" />
+            {heroProduct?.image ? (
+              <img src={heroProduct.image} alt={heroProduct.name} className="eloise-hero-image" />
+            ) : (
+              <div className="eloise-hero-coffee-cup">☕</div>
+            )}
+            <div className="eloise-hero-badge">
+              <strong>4.9★</strong>
+              Guest Rating
+            </div>
+            <div className="eloise-hero-badge2">
+              <strong>{menuCount}+</strong>
+              Menu Items
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
 
-        <footer id="contact" className="bg-[#0b1b39] px-4 py-10 text-slate-300 md:px-7">
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-4">
+      {!checkoutPage && (
+      <div className="eloise-marquee-wrap">
+        <div className="eloise-marquee-track">
+          {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, index) => (
+            <div className="eloise-marquee-item" key={`${item}-${index}`}>{item}</div>
+          ))}
+        </div>
+      </div>
+      )}
+
+      {!checkoutPage && (
+      <section className="eloise-about" id="about">
+        <div className="eloise-about-img eloise-reveal">
+          <div className="eloise-about-img-main">☕</div>
+          <div className="eloise-about-float">
+            <strong>100%</strong>
+            <span>Arabica Beans</span>
+          </div>
+        </div>
+        <div className="eloise-reveal">
+          <div className="eloise-section-label">About Us</div>
+          <h2>
+            More Than Coffee
+            <br />
+            It is a <em>Ritual</em>
+          </h2>
+          <p>
+            At Eloise Coffee, we believe every morning deserves a moment of calm. Our baristas are trained to coax the best from every bean while honoring the craft.
+          </p>
+          <p>
+            We source single-origin beans from sustainable farms, roast in small batches, and pair every cup with pastries made fresh each day before dawn.
+          </p>
+          <div className="eloise-about-stats">
             <div>
-              <a href="/" className="flex items-center gap-2 text-white">
-                <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#2d71f8]">
-                  <Coffee size={17} />
+              <div className="eloise-stat-num">{menuCount}+</div>
+              <div className="eloise-stat-label">Menu Items</div>
+            </div>
+            <div>
+              <div className="eloise-stat-num">{happyCustomerCount}+</div>
+              <div className="eloise-stat-label">Happy Customers</div>
+            </div>
+            <div>
+              <div className="eloise-stat-num">5★</div>
+              <div className="eloise-stat-label">Avg Rating</div>
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {!checkoutPage && (
+      <section className="eloise-menu-section" id="menu">
+        <div className="eloise-section-header eloise-reveal">
+          <div className="eloise-section-label eloise-center-label">Our Menu</div>
+          <h2>
+            Crafted with Love,
+            <br />
+            Served with Pride
+          </h2>
+        </div>
+        <div className="eloise-menu-tabs eloise-reveal">
+          {menuTabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`eloise-tab ${resolvedActiveCategory === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveCategory(tab.id)}
+            >
+              {tab.name}
+            </button>
+          ))}
+        </div>
+        {loading && <div className="eloise-status-card">Loading menu...</div>}
+        {!loading && error && <div className="eloise-status-card eloise-status-error">{error}</div>}
+        {!loading && !error && (
+          <div className="eloise-menu-grid" id="menuGrid">
+            {filteredProducts.map((product, index) => {
+              const stockQty = normalizePositiveInteger(product.stockQty)
+              const soldOut = stockQty <= 0
+              const badge = soldOut ? 'Sold Out' : index < 3 ? 'Popular' : ''
+              const isAdded = Boolean(addedState[product.id])
+              const emoji = deriveProductEmoji(product.category, index)
+              return (
+                <div className="eloise-menu-card" key={product.id}>
+                  <div className="eloise-menu-card-img">
+                    {product.image ? (
+                      <img src={product.image} alt={product.name} className="eloise-menu-image" />
+                    ) : (
+                      <span>{emoji}</span>
+                    )}
+                    {badge ? <div className="eloise-menu-card-badge">{badge}</div> : null}
+                  </div>
+                  <div className="eloise-menu-card-body">
+                    <div className="eloise-menu-card-cat">{String(product.category ?? 'menu')}</div>
+                    <h3 className="line-clamp-1" title={product.name}>{product.name}</h3>
+                    <p className="line-clamp-2">{product.description || 'Handcrafted with quality ingredients and balanced flavor.'}</p>
+                    <div className="eloise-menu-card-footer">
+                      <span className="eloise-price">{formatMoney(product.basePrice)}</span>
+                      <button
+                        className="eloise-add-btn"
+                        onClick={() => handleAddToCart(product.id, product.stockQty)}
+                        disabled={soldOut}
+                        title={soldOut ? 'Out of stock' : 'Add to cart'}
+                      >
+                        {isAdded ? <CheckCircle2 size={16} /> : <Plus size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {filteredProducts.length === 0 && (
+              <div className="eloise-status-card">No products found in this category.</div>
+            )}
+          </div>
+        )}
+      </section>
+      )}
+
+      {checkoutPage && (
+      <section className="eloise-checkout-section" id="checkout">
+        <div className="eloise-section-header eloise-reveal">
+          <div className="eloise-section-label eloise-center-label">Checkout</div>
+          <h2>Cart and Payment</h2>
+        </div>
+        <div className="eloise-checkout-grid">
+          <article className="eloise-checkout-card eloise-reveal">
+            <header className="eloise-checkout-card-header">
+              <p className="eloise-cart-label">Cart</p>
+              <h3>Eloise Selection</h3>
+            </header>
+            <div className="eloise-cart-body">
+              {cartLines.length === 0 && (
+                <div className="eloise-cart-empty">
+                  <ShoppingCart size={18} />
+                  <p>No items added yet.</p>
+                </div>
+              )}
+              {cartLines.map((line, index) => {
+                const productId = String(line.product.id)
+                return (
+                  <article className="eloise-cart-item" key={productId}>
+                    <div className="eloise-cart-item-thumb">
+                      {line.product.image ? (
+                        <img src={line.product.image} alt={line.product.name} />
+                      ) : (
+                        <span>{deriveProductEmoji(line.product.category, index)}</span>
+                      )}
+                    </div>
+                    <div className="eloise-cart-item-content">
+                      <p className="eloise-cart-item-name">{line.product.name}</p>
+                      <p className="eloise-cart-item-price">{formatMoney(line.product.basePrice)} each</p>
+                      <div className="eloise-cart-item-actions">
+                        <div className="eloise-qty-control">
+                          <button type="button" onClick={() => updateCartLineQuantity(productId, -1)}>
+                            <Minus size={14} />
+                          </button>
+                          <span>{line.quantity}</span>
+                          <button type="button" onClick={() => updateCartLineQuantity(productId, 1)}>
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                        <button type="button" className="eloise-cart-remove" onClick={() => removeCartLine(productId)}>
+                          <Trash2 size={13} />
+                          <span>Remove</span>
+                        </button>
+                      </div>
+                    </div>
+                    <p className="eloise-cart-item-total">
+                      {formatMoney(Number(line.product.basePrice ?? 0) * line.quantity)}
+                    </p>
+                  </article>
+                )
+              })}
+            </div>
+          </article>
+
+          <article className="eloise-checkout-card eloise-reveal">
+            <header className="eloise-checkout-card-header">
+              <p className="eloise-cart-label">Payment</p>
+              <h3>Customer Details</h3>
+            </header>
+            <div className="eloise-payment-card-body">
+              {customerReady && !customerSession?.id && (
+                <div className="eloise-login-required">
+                  <p>Login required to buy items.</p>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-primary"
+                    onClick={openCustomerAuthPage}
+                  >
+                    <UserRound size={14} />
+                    <span>Login or Register</span>
+                  </button>
+                </div>
+              )}
+              <div className="eloise-cart-form">
+                <label>
+                  Name
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(event) => setCustomerName(event.target.value)}
+                    placeholder="Customer name"
+                  />
+                </label>
+                <label>
+                  Phone
+                  <input
+                    type="text"
+                    value={customerPhone}
+                    onChange={(event) => setCustomerPhone(event.target.value)}
+                    placeholder="Phone number"
+                  />
+                </label>
+                <label>
+                  Delivery Address
+                  <textarea
+                    rows={2}
+                    value={profileAddress}
+                    onChange={(event) => setProfileAddress(event.target.value)}
+                    placeholder="Delivery address"
+                  />
+                </label>
+                <div className="eloise-address-quick-picks">
+                  <button
+                    type="button"
+                    onClick={() => applySavedAddress('home')}
+                    disabled={!savedAddresses.home}
+                  >
+                    Home
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applySavedAddress('work')}
+                    disabled={!savedAddresses.work}
+                  >
+                    Work
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => saveAddressPreset('home')}
+                    disabled={!profileAddress.trim()}
+                  >
+                    Save as Home
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => saveAddressPreset('work')}
+                    disabled={!profileAddress.trim()}
+                  >
+                    Save as Work
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="eloise-location-btn"
+                  onClick={handleDetectCurrentLocation}
+                  disabled={isLocatingAddress}
+                >
+                  {isLocatingAddress ? <Loader2 size={14} className="eloise-spin" /> : <Crosshair size={14} />}
+                  <span>{isLocatingAddress ? 'Detecting current location...' : 'Use Current Location (Google Maps)'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="eloise-map-toggle eloise-map-toggle-checkout"
+                  onClick={() => setCheckoutMapOpen((open) => !open)}
+                >
+                  <MapPin size={14} />
+                  <span>{checkoutMapOpen ? 'Hide Map Picker' : 'Open Map Picker'}</span>
+                </button>
+                {checkoutMapOpen && (
+                  <div className="eloise-map-card">
+                    <Suspense fallback={<div className="eloise-map-loading">Loading map...</div>}>
+                      <LeafletAddressPicker coordinates={selectedCoordinates} onPickCoordinates={handleMapPick} />
+                    </Suspense>
+                    <p>Tap map to choose exact delivery point.</p>
+                  </div>
+                )}
+                <label>
+                  Note
+                  <textarea
+                    rows={2}
+                    value={customerNote}
+                    onChange={(event) => setCustomerNote(event.target.value)}
+                    placeholder="Optional note"
+                  />
+                </label>
+              </div>
+
+              <div className="eloise-payment-methods">
+                <p>Payment Method</p>
+                <div className="eloise-payment-options">
+                  {PAYMENT_METHOD_ITEMS.map((method) => {
+                    const Icon = method.icon
+                    const methodLabel =
+                      method.id === 'Cash'
+                        ? String(paymentConfig?.cashLabel || method.label)
+                        : method.label
+                    return (
+                      <button
+                        key={method.id}
+                        type="button"
+                        className={`eloise-payment-chip ${paymentMethod === method.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setPaymentMethod(method.id)
+                          setCheckoutError('')
+                          setCheckoutSuccess('')
+                        }}
+                      >
+                        <Icon size={14} />
+                        <span>{methodLabel}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {paymentMethod === 'KHQR' && (
+                <div className="eloise-khqr-panel">
+                  <div className="eloise-khqr-card-wrap">
+                    <KHQRCard
+                      amount={roundedTotalAmount}
+                      currency={catalog.currency}
+                      accountName={paymentConfig.khqr.merchantName}
+                      qrValue={hasStaticKhqr ? paymentConfig.khqr.qr : ''}
+                    />
+                  </div>
+                  <div className="eloise-khqr-meta-row">
+                    <span>Merchant: {paymentConfig.khqr.merchantName || '-'}</span>
+                    <span>{paymentConfig.khqr.merchantCity || '-'}</span>
+                  </div>
+                  <p className="eloise-khqr-inline">
+                    <QrCode size={14} />
+                    <span>Scan this KHQR directly in your banking app.</span>
+                  </p>
+                  {!hasStaticKhqr && <p className="eloise-cart-message error">KHQR is not configured on server yet.</p>}
+                </div>
+              )}
+
+              {checkoutError && <p className="eloise-cart-message error">{checkoutError}</p>}
+              {checkoutSuccess && <p className="eloise-cart-message success">{checkoutSuccess}</p>}
+              {latestOrder && (
+                <div className="eloise-tracking-card">
+                  <div className="eloise-tracking-header">
+                    <strong>{latestOrder.orderNumber}</strong>
+                    <span>{latestOrder.paymentMethod === 'Cash' ? 'Cash on Delivery' : latestOrder.paymentMethod}</span>
+                  </div>
+                  <p className="eloise-tracking-eta">
+                    {trackingEtaMinutes > 0
+                      ? `Estimated delivery in ${trackingEtaMinutes} min`
+                      : 'Estimated delivery window reached'}
+                  </p>
+                  <div className="eloise-tracking-steps">
+                    {['Order Placed', 'Preparing', 'Out for Delivery', 'Delivered'].map((label, index) => (
+                      <div key={label} className={`eloise-tracking-step ${index <= trackingStage ? 'active' : ''}`}>
+                        <span>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="eloise-cart-summary">
+                <div>
+                  <span>Subtotal</span>
+                  <strong>{formatMoney(subtotal)}</strong>
                 </div>
                 <div>
-                  <p className="text-sm font-bold">Grill & Coffee</p>
-                  <p className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Cambodia</p>
+                  <span>Tax ({(resolvedTaxRate * 100).toFixed(1).replace(/\.0$/, '')}%)</span>
+                  <strong>{formatMoney(taxAmount)}</strong>
                 </div>
-              </a>
-              <p className="mt-4 text-sm leading-7 text-slate-400">
-                Trusted coffee brand delivering quality roast and brew products for everyday consumers across Cambodia.
-              </p>
+                <div>
+                  <span>Total</span>
+                  <strong>{formatMoney(totalAmount)}</strong>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="eloise-cart-checkout"
+                onClick={handleCheckout}
+                disabled={
+                  placingOrder ||
+                  cartLines.length === 0 ||
+                  !customerSession?.id
+                }
+              >
+                <span>{checkoutButtonLabel}</span>
+                <ArrowRight size={15} />
+              </button>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-white">Store</p>
-              <div className="mt-3 space-y-2 text-sm">
-                <a href="#home" onClick={(event) => handleNavClick(event, 'home')} className="block hover:text-white">Home</a>
-                <a href="#shop" onClick={(event) => handleNavClick(event, 'shop')} className="block hover:text-white">Products</a>
-                <a href="/order" className="block hover:text-white">My Cart</a>
-                <a href="#faq" onClick={(event) => handleNavClick(event, 'faq')} className="block hover:text-white">Track Order</a>
+          </article>
+        </div>
+      </section>
+      )}
+
+      {!checkoutPage && (
+      <section className="eloise-experience" id="experience">
+        <div className="eloise-section-header eloise-reveal">
+          <div className="eloise-section-label eloise-center-label">Why Eloise</div>
+          <h2>The Eloise Experience</h2>
+        </div>
+        <div className="eloise-exp-grid">
+          {EXPERIENCE_ITEMS.map((item) => (
+            <div className="eloise-exp-card eloise-reveal" key={item.title}>
+              <div className="eloise-exp-icon">{item.icon}</div>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+      )}
+
+      {!checkoutPage && (
+      <section className="eloise-testimonials">
+        <div className="eloise-section-header eloise-reveal">
+          <div className="eloise-section-label eloise-center-label">What Guests Say</div>
+          <h2>Loved by Coffee Lovers</h2>
+        </div>
+        <div className="eloise-test-grid">
+          {TESTIMONIALS.map((item) => (
+            <div className="eloise-test-card eloise-reveal" key={item.name}>
+              <div className="eloise-stars">★★★★★</div>
+              <blockquote>{item.quote}</blockquote>
+              <div className="eloise-test-author">
+                <div className="eloise-test-avatar">{item.avatar}</div>
+                <div>
+                  <div className="eloise-test-name">{item.name}</div>
+                  <div className="eloise-test-role">{item.role}</div>
+                </div>
               </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-white">Company</p>
-              <div className="mt-3 space-y-2 text-sm">
-                <a href="#story" onClick={(event) => handleNavClick(event, 'story')} className="block hover:text-white">About Us</a>
-                <a href="#tips" onClick={(event) => handleNavClick(event, 'tips')} className="block hover:text-white">Blog & Tips</a>
-                <a href="#faq" onClick={(event) => handleNavClick(event, 'faq')} className="block hover:text-white">FAQ</a>
-                <a href="#contact" onClick={(event) => handleNavClick(event, 'contact')} className="block hover:text-white">Contact</a>
+          ))}
+        </div>
+      </section>
+      )}
+
+      {!checkoutPage && (
+      <section className="eloise-info-section" id="location">
+        <div className="eloise-info-map">🗺️</div>
+        <div className="eloise-info-details eloise-reveal">
+          <div className="eloise-section-label">Find Us</div>
+          <h2>Visit Eloise Coffee</h2>
+          <div className="eloise-hours-grid">
+            {Object.keys(DAY_SCHEDULE).map((day) => (
+              <div className={`eloise-hour-row ${day === todayName ? 'today' : ''}`} key={day}>
+                <span className="day">
+                  {day}
+                  {day === todayName ? ' (Today)' : ''}
+                </span>
+                <span className="time">{DAY_SCHEDULE[day]}</span>
               </div>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">Contact</p>
-              <div className="mt-3 space-y-2 text-sm text-slate-400">
-                <p>123 Monivong Blvd, Phnom Penh</p>
-                <p>+855 12 345 678</p>
-                <p>hello@grillcoffee.com.kh</p>
-              </div>
+            ))}
+          </div>
+          <div className="eloise-address">
+            <span>📍</span>
+            <p>
+              123 Coffee Lane, Table 01 District
+              <br />
+              Your City, CC 00100
+              <br />
+              <br />
+              <strong>+1 (012) 345-6789</strong>
+              <br />
+              hello@eloisecoffee.com
+            </p>
+          </div>
+        </div>
+      </section>
+      )}
+
+      {!checkoutPage && (
+      <section className="eloise-newsletter">
+        <div className="eloise-section-label eloise-center-label">Stay in the Loop</div>
+        <h2>
+          Get Weekly Specials and
+          <br />
+          New Menu Drops
+        </h2>
+        <p>No spam, just the good stuff. Seasonal menus, events, and exclusive subscriber offers.</p>
+        <div className="eloise-newsletter-form">
+          <input type="email" placeholder="your@email.com" />
+          <button>Subscribe</button>
+        </div>
+      </section>
+      )}
+
+      {!checkoutPage && (
+      <footer className="eloise-footer">
+        <div className="eloise-footer-top">
+          <div className="eloise-footer-brand">
+            <a href="#top" className="eloise-nav-logo">
+              <span>Eloise</span> Coffee
+            </a>
+            <p>Crafting moments of warmth, one cup at a time. Specialty coffee and fresh pastries served with heart.</p>
+            <div className="eloise-footer-social">
+              <a className="eloise-social-btn" href="#top">📘</a>
+              <a className="eloise-social-btn" href="#top">📸</a>
+              <a className="eloise-social-btn" href="#top">🐦</a>
+              <a className="eloise-social-btn" href="#top">▶️</a>
             </div>
           </div>
-          <div className="mt-8 border-t border-white/10 pt-4 text-xs text-slate-500">
-            <p>2026 Grill & Coffee Cambodia. All rights reserved.</p>
+          <div className="eloise-footer-col">
+            <h4>Menu</h4>
+            <ul>
+              <li><a href="#menu">Coffee</a></li>
+              <li><a href="#menu">Pastries</a></li>
+              <li><a href="#menu">Cakes</a></li>
+              <li><a href="#menu">Breads</a></li>
+              <li><a href="#menu">Sandwiches</a></li>
+              <li><a href="#menu">Donuts</a></li>
+            </ul>
           </div>
-        </footer>
-      </div>
+          <div className="eloise-footer-col">
+            <h4>Visit</h4>
+            <ul>
+              <li><a href="#location">Location</a></li>
+              <li><a href="#location">Hours</a></li>
+              <li><a href="#menu">Reservations</a></li>
+              <li><a href="#menu">Private Events</a></li>
+              <li><a href="#menu">Catering</a></li>
+            </ul>
+          </div>
+          <div className="eloise-footer-col">
+            <h4>Company</h4>
+            <ul>
+              <li><a href="#about">Our Story</a></li>
+              <li><a href="#experience">Sustainability</a></li>
+              <li><a href="#experience">Careers</a></li>
+              <li><a href="#experience">Press</a></li>
+              <li><a href="#location">Contact</a></li>
+            </ul>
+          </div>
+        </div>
+        <div className="eloise-footer-bottom">
+          <span>© 2026 Eloise Coffee. All rights reserved.</span>
+          <span>Privacy · Terms · Cookies</span>
+        </div>
+      </footer>
+      )}
     </div>
   )
 }

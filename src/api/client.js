@@ -1,8 +1,14 @@
 const AUTH_TOKEN_STORAGE_KEY = 'tenant-pos-auth-token'
+const CUSTOMER_AUTH_TOKEN_STORAGE_KEY = 'tenant-public-customer-token'
 
 let authToken = ''
 if (typeof window !== 'undefined') {
   authToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || ''
+}
+
+let customerAuthToken = ''
+if (typeof window !== 'undefined') {
+  customerAuthToken = window.localStorage.getItem(CUSTOMER_AUTH_TOKEN_STORAGE_KEY) || ''
 }
 
 export function getStoredAuthToken() {
@@ -21,6 +27,24 @@ export function setAuthToken(token) {
 
 export function clearAuthToken() {
   setAuthToken('')
+}
+
+export function getStoredPublicCustomerToken() {
+  return customerAuthToken
+}
+
+export function setPublicCustomerToken(token) {
+  customerAuthToken = String(token ?? '').trim()
+  if (typeof window === 'undefined') return
+  if (customerAuthToken) {
+    window.localStorage.setItem(CUSTOMER_AUTH_TOKEN_STORAGE_KEY, customerAuthToken)
+  } else {
+    window.localStorage.removeItem(CUSTOMER_AUTH_TOKEN_STORAGE_KEY)
+  }
+}
+
+export function clearPublicCustomerToken() {
+  setPublicCustomerToken('')
 }
 
 export async function loginWithPassword({ username, password }) {
@@ -96,6 +120,21 @@ export async function fetchKhqrStatus(md5, signal) {
   return requestJson(`/api/khqr/status/${encodeURIComponent(String(md5))}`, { signal })
 }
 
+export async function generatePublicKhqr(payload) {
+  return requestJson('/api/public/khqr/generate', {
+    method: 'POST',
+    body: payload,
+    auth: false,
+  })
+}
+
+export async function fetchPublicKhqrStatus(md5, signal) {
+  return requestJson(`/api/public/khqr/status/${encodeURIComponent(String(md5))}`, {
+    signal,
+    auth: false,
+  })
+}
+
 export async function fetchSettings(signal) {
   return requestJson('/api/settings', { signal })
 }
@@ -138,11 +177,69 @@ export async function fetchPublicCatalog(signal) {
   return requestJson('/api/public/catalog', { signal, auth: false })
 }
 
+export async function fetchPublicPaymentConfig(signal) {
+  return requestJson('/api/public/payment-config', { signal, auth: false })
+}
+
+export async function registerPublicCustomer(payload) {
+  const response = await requestJson('/api/public/customers/register', {
+    method: 'POST',
+    body: payload,
+    auth: false,
+  })
+  if (response?.token) {
+    setPublicCustomerToken(response.token)
+  }
+  return response
+}
+
+export async function loginPublicCustomer(payload) {
+  const response = await requestJson('/api/public/customers/login', {
+    method: 'POST',
+    body: payload,
+    auth: false,
+  })
+  if (response?.token) {
+    setPublicCustomerToken(response.token)
+  }
+  return response
+}
+
+export async function fetchPublicCustomer(signal) {
+  return requestJson('/api/public/customers/me', {
+    signal,
+    auth: false,
+    customerAuth: true,
+  })
+}
+
+export async function updatePublicCustomerProfile(payload) {
+  return requestJson('/api/public/customers/me', {
+    method: 'PATCH',
+    body: payload,
+    auth: false,
+    customerAuth: true,
+  })
+}
+
+export async function logoutPublicCustomer() {
+  try {
+    await requestJson('/api/public/customers/logout', {
+      method: 'POST',
+      auth: false,
+      customerAuth: true,
+    })
+  } finally {
+    clearPublicCustomerToken()
+  }
+}
+
 export async function createPublicOrder(payload) {
   return requestJson('/api/public/orders', {
     method: 'POST',
     body: payload,
     auth: false,
+    customerAuth: true,
   })
 }
 
@@ -187,7 +284,7 @@ export async function fetchInventoryMovements(limit = 80, signal) {
   })
 }
 
-async function requestJson(url, { method = 'GET', body, signal, auth = true } = {}) {
+async function requestJson(url, { method = 'GET', body, signal, auth = true, customerAuth = false, timeout = 15000 } = {}) {
   const headers = {}
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -195,18 +292,35 @@ async function requestJson(url, { method = 'GET', body, signal, auth = true } = 
   if (auth && authToken) {
     headers.Authorization = `Bearer ${authToken}`
   }
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal,
-  })
-  if (!response.ok) {
-    const details = await safeReadError(response)
-    throw new Error(details || `Request failed: ${response.status}`)
+  if (customerAuth && customerAuthToken) {
+    headers['X-Customer-Session'] = customerAuthToken
   }
-  if (response.status === 204) return null
-  return response.json()
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+  if (signal instanceof AbortSignal) {
+    signal.addEventListener('abort', () => {
+      clearTimeout(timeoutId)
+      controller.abort()
+    })
+  }
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      const details = await safeReadError(response)
+      throw new Error(details || `Request failed: ${response.status}`)
+    }
+    if (response.status === 204) return null
+    return await response.json()
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 async function safeReadError(response) {

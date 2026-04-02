@@ -1,4 +1,6 @@
 import {
+  ArrowRight,
+  ArrowUpRight,
   CalendarDays,
   Coffee,
   Download,
@@ -11,6 +13,7 @@ import {
   Trash2,
   Upload,
   Users,
+  X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createUser, fetchSettings, fetchUsers, saveSettings, updateUser } from '../api/client'
@@ -908,12 +911,12 @@ export function ManageScreen({
   return (
     <div className="grid h-screen w-full grid-cols-1 overflow-hidden">
       <div className="flex min-h-0 h-full flex-col overflow-hidden bg-white">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 md:px-6">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-4 md:px-6">
           <div className="flex items-center gap-2">
-            <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-slate-500">
+            <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-stone-500">
               <Menu size={18} />
             </button>
-            <h1 className="text-xl font-semibold text-slate-900">{config.title}</h1>
+            <h1 className="text-xl font-bold text-stone-900">{config.title}</h1>
           </div>
           <HeaderChip icon={CalendarDays} label={formatDate(now)} />
         </header>
@@ -921,12 +924,12 @@ export function ManageScreen({
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <section className="ui-surface-muted p-4 md:p-6">
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl bg-[#2D71F8]/10 p-2 text-[#2D71F8]">
+              <div className="rounded-xl bg-[#7c4a32]/10 p-2 text-[#7c4a32]">
                 <SectionIcon size={20} />
               </div>
               <div>
-                <p className="text-base font-semibold text-slate-900">{config.title}</p>
-                <p className="text-sm text-slate-500">{config.subtitle}</p>
+                <p className="text-base font-bold text-stone-900">{config.title}</p>
+                <p className="text-sm text-stone-500">{config.subtitle}</p>
               </div>
             </div>
 
@@ -937,74 +940,93 @@ export function ManageScreen({
                     Read-only mode: your role cannot modify inventory catalog or stock.
                   </div>
                 )}
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <article className="rounded-xl border border-slate-200 bg-white p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Total SKUs</p>
-                    <p className="mt-2 text-2xl font-black text-slate-900">{inventoryRows.length}</p>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <article className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Total Products</p>
+                    <p className="mt-1 text-2xl font-black text-stone-800">{inventoryRows.length}</p>
                   </article>
-                  <article className="rounded-xl border border-slate-200 bg-white p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Total Units</p>
-                    <p className="mt-2 text-2xl font-black text-slate-900">{totalStockUnits}</p>
+                  <article className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Total Units</p>
+                    <p className="mt-1 text-2xl font-black text-stone-800">{totalStockUnits}</p>
                   </article>
-                  <article className="rounded-xl border border-[#2D71F8]/20 bg-[#2D71F8]/[0.04] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#2D71F8]/80">Low Stock</p>
-                    <p className="mt-2 text-2xl font-black text-[#2D71F8]">{lowStockProducts.length}</p>
+                  <article className="rounded-2xl border border-amber-100 bg-amber-50/30 p-5 shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Low Stock</p>
+                    <p className="mt-1 text-2xl font-black text-amber-600">{lowStockProducts.length}</p>
                   </article>
-                  <article className="rounded-xl border border-slate-300 bg-slate-100/70 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Out Of Stock</p>
-                    <p className="mt-2 text-2xl font-black text-slate-700">{outOfStockProducts.length}</p>
+                  <article className="rounded-2xl border border-rose-100 bg-rose-50/30 p-5 shadow-sm">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-rose-600">Out Of Stock</p>
+                    <p className="mt-1 text-2xl font-black text-rose-600">{outOfStockProducts.length}</p>
                   </article>
                 </div>
 
                 {alertProducts.length > 0 ? (
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-slate-800">Stock Alerts</h3>
-                      <p className="text-xs text-slate-400">{alertProducts.length} items need attention</p>
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h4 className="text-[11px] font-bold uppercase tracking-widest text-stone-400">Inventory Alerts</h4>
+                      <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600 border border-rose-100">
+                        {alertProducts.length} Needs Attention
+                      </span>
                     </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                       {alertProducts.map((item) => (
                         <article
                           key={`alert-${item.id}`}
-                          className={`rounded-xl border p-3 ${
+                          className={`group relative flex flex-col gap-3 rounded-2xl border p-4 transition-all hover:shadow-md ${
                             item.stockState === 'out'
-                              ? 'border-slate-300 bg-slate-100/70'
-                              : 'border-[#2D71F8]/20 bg-[#2D71F8]/[0.04]'
+                              ? 'border-rose-200 bg-rose-50/30'
+                              : 'border-amber-200 bg-amber-50/30'
                           }`}
                         >
-                          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {item.stockState === 'out'
-                              ? 'Out of stock'
-                              : `Low stock (${item.stockQty} / ${item.stockThreshold})`}
-                          </p>
-                          <div className="mt-2 flex gap-1.5">
-                            <button
-                              onClick={() => updateProductStock(item, 1)}
-                              disabled={!canManageCatalog || stockUpdatingId === item.id}
-                              className="ui-btn ui-btn-secondary rounded-md bg-white px-2 py-1 text-[11px] text-slate-600"
-                            >
-                              +1
-                            </button>
-                            <button
-                              onClick={() => updateProductStock(item, 10)}
-                              disabled={!canManageCatalog || stockUpdatingId === item.id}
-                              className="ui-btn ui-btn-secondary rounded-md bg-white px-2 py-1 text-[11px] text-slate-600"
-                            >
-                              +10
-                            </button>
+                          <div className="flex items-start justify-between">
+                            <div className="min-w-0 flex-1">
+                              <h5 className="truncate text-sm font-bold text-stone-800">{item.name}</h5>
+                              <p className="text-[11px] font-medium text-stone-500 uppercase tracking-tight">{item.category}</p>
+                            </div>
+                            <span className={`flex h-8 w-8 items-center justify-center rounded-xl text-white shadow-sm ${
+                              item.stockState === 'out' ? 'bg-rose-500' : 'bg-amber-500'
+                            }`}>
+                              <Package size={14} />
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-end justify-between">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Current Stock</p>
+                              <p className={`text-xl font-black ${
+                                item.stockState === 'out' ? 'text-rose-600' : 'text-amber-600'
+                              }`}>
+                                {item.stockQty}
+                                <span className="ml-1 text-[11px] font-bold text-stone-400 uppercase">Units</span>
+                              </p>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                               <button
+                                onClick={() => updateProductStock(item, 10)}
+                                disabled={!canManageCatalog || stockUpdatingId === item.id}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-[11px] font-bold text-stone-700 shadow-sm border border-stone-200 hover:bg-stone-50 active:scale-95 transition-all"
+                              >
+                                {stockUpdatingId === item.id ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                  <Plus size={12} />
+                                )}
+                                RESTOCK 10
+                              </button>
+                            </div>
                           </div>
                         </article>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2">
-                    <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                      <span className="h-2 w-2 rounded-full bg-emerald-600" />
-                      All stock healthy
+                  <div className="mt-4 flex items-center gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
+                      <CheckCircle2 size={24} />
                     </div>
-                    <p className="text-xs text-emerald-700/80">No items need attention</p>
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-800">Inventory status healthy</h4>
+                      <p className="text-xs font-medium text-emerald-600/80">All items are above their low-stock thresholds.</p>
+                    </div>
                   </div>
                 )}
 
@@ -1046,9 +1068,9 @@ export function ManageScreen({
                         <button
                           key={option.id}
                           onClick={() => setMovementTypeFilter(option.id)}
-                          className={`ui-btn rounded-md px-2.5 py-1 text-xs ${
+                          className={`ui-btn rounded-md px-2.5 py-1 text-xs transition-colors ${
                             movementTypeFilter === option.id
-                              ? 'bg-[#2D71F8] text-white'
+                              ? 'bg-[var(--ui-primary)] text-white shadow-sm'
                               : 'text-slate-600 hover:bg-slate-100'
                           }`}
                         >
@@ -1057,13 +1079,13 @@ export function ManageScreen({
                       ))}
                     </div>
                   </div>
-                  <div className="max-h-[220px] overflow-y-auto rounded-xl border border-slate-100">
-                    <div className="grid grid-cols-[1.2fr_80px_80px_1fr_1fr] gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <div className="max-h-[320px] overflow-y-auto rounded-xl border border-slate-100 shadow-inner">
+                    <div className="sticky top-0 z-10 grid grid-cols-[1.2fr_80px_80px_1fr_1fr] gap-2 border-b border-slate-200 bg-slate-50/90 px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 backdrop-blur-sm">
                       <p>Product</p>
                       <p>Type</p>
                       <p>Qty</p>
-                      <p>Stock</p>
-                      <p>Time</p>
+                      <p>Stock Level</p>
+                      <p>Date & Time</p>
                     </div>
                     {filteredInventoryMovements.map((movement) => {
                       const isSale = movement.movementType === 'sale'
@@ -1072,57 +1094,60 @@ export function ManageScreen({
                       return (
                         <div
                           key={`movement-${movement.id}`}
-                          className="grid grid-cols-[1.2fr_80px_80px_1fr_1fr] gap-2 border-b border-slate-100 px-3 py-2 text-sm text-slate-700"
+                          className="grid grid-cols-[1.2fr_80px_80px_1fr_1fr] items-center gap-2 border-b border-slate-50 px-3 py-3 text-sm transition-colors hover:bg-slate-50/50"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-semibold text-slate-900">{movement.productName}</p>
-                            <p className="truncate text-[11px] text-slate-400">
-                              {movement.orderNumber ? `Order ${movement.orderNumber}` : movement.note || 'Manual update'}
+                            <p className="truncate font-bold text-slate-800">{movement.productName}</p>
+                            <p className="truncate text-[11px] text-slate-500">
+                              {movement.orderNumber ? `Order #${movement.orderNumber}` : movement.note || 'Manual Adjustment'}
                             </p>
                           </div>
-                          <p>
+                          <div>
                             <span
-                                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                                 isSale
-                                  ? 'bg-[#2D71F8]/10 text-[#2D71F8]'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-100'
                                   : isOpening
-                                    ? 'bg-emerald-50 text-emerald-700'
-                                    : 'bg-slate-100 text-slate-600'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
                               }`}
                             >
-                              {isSale ? 'Sale' : isOpening ? 'Open' : 'Adjust'}
+                              {isSale ? 'Sale' : isOpening ? 'Initial' : 'Adjust'}
                             </span>
-                          </p>
-                          <p className={`font-semibold ${isNegative ? 'text-[#FC4A4A]' : 'text-[#1C8370]'}`}>
+                          </div>
+                          <p className={`font-bold ${isNegative ? 'text-rose-500' : 'text-emerald-600'}`}>
                             {formatSignedQuantity(movement.quantity)}
                           </p>
-                          <p className="text-xs text-slate-500">
-                            {Number(movement.beforeQty ?? 0)} -&gt; {Number(movement.afterQty ?? 0)}
-                          </p>
-                          <p className="text-xs text-slate-500">
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <span className="font-medium">{Number(movement.beforeQty ?? 0)}</span>
+                            <ArrowRight size={10} className="text-slate-300" />
+                            <span className="font-bold text-slate-700">{Number(movement.afterQty ?? 0)}</span>
+                          </div>
+                          <p className="text-[11px] font-medium text-slate-400">
                             {formatMovementTimestamp(movement.createdAt)}
                           </p>
                         </div>
                       )
                     })}
                     {filteredInventoryMovements.length === 0 && (
-                      <div className="px-3 py-3 text-sm text-slate-400">
-                        No stock movement recorded yet.
+                      <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                        <CalendarDays size={32} className="mb-2 opacity-20" />
+                        <p className="text-sm">No stock movement recorded yet.</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 xl:grid-cols-[340px_1fr]">
+                <div className="mt-4 grid gap-4 rounded-2xl border border-stone-200 bg-white p-4 xl:grid-cols-[340px_1fr]">
                   <section>
                     <div className="mb-3 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">
+                      <h3 className="text-sm font-bold text-stone-800">
                         {editingProductId ? 'Edit Product' : 'Add Product'}
                       </h3>
                       {editingProductId && (
                         <button
                           onClick={resetProductForm}
-                          className="ui-btn ui-btn-secondary px-2.5 py-1 text-xs text-slate-600"
+                          className="ui-btn ui-btn-secondary px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-50"
                         >
                           Cancel
                         </button>
@@ -1135,7 +1160,7 @@ export function ManageScreen({
                           setProductDraft((previous) => ({ ...previous, name: event.target.value }))
                         }
                         placeholder="Product name"
-                        className="ui-input px-3 py-2 text-sm"
+                        className="ui-input px-3 py-2 text-sm font-medium"
                       />
                       <div className="grid grid-cols-2 gap-2">
                         <select
@@ -1155,7 +1180,7 @@ export function ManageScreen({
                               category: nextCategory,
                             }))
                           }}
-                          className="ui-input px-3 py-2 text-sm"
+                          className="ui-input px-3 py-2 text-sm font-medium"
                         >
                           {categoryOptions.length === 0 && (
                             <option value="" disabled>
@@ -1174,53 +1199,62 @@ export function ManageScreen({
                           onChange={(event) =>
                             setProductDraft((previous) => ({ ...previous, label: event.target.value }))
                           }
-                          placeholder="Label"
-                          className="ui-input px-3 py-2 text-sm"
+                          placeholder="Display Label"
+                          className="ui-input px-3 py-2 text-sm font-medium"
                         />
                       </div>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={productDraft.basePrice}
-                        onChange={(event) =>
-                          setProductDraft((previous) => ({
-                            ...previous,
-                            basePrice: event.target.value,
-                          }))
-                        }
-                        placeholder="Base price (USD)"
-                        className="ui-input px-3 py-2 text-sm"
-                      />
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-400">$</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={productDraft.basePrice}
+                          onChange={(event) =>
+                            setProductDraft((previous) => ({
+                              ...previous,
+                              basePrice: event.target.value,
+                            }))
+                          }
+                          placeholder="0.00"
+                          className="ui-input py-2 pl-7 pr-3 text-sm font-black"
+                        />
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          step="1"
-                          value={productDraft.stockQty}
-                          onChange={(event) =>
-                            setProductDraft((previous) => ({
-                              ...previous,
-                              stockQty: event.target.value,
-                            }))
-                          }
-                          placeholder="Stock qty"
-                          className="ui-input px-3 py-2 text-sm"
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          step="1"
-                          value={productDraft.stockThreshold}
-                          onChange={(event) =>
-                            setProductDraft((previous) => ({
-                              ...previous,
-                              stockThreshold: event.target.value,
-                            }))
-                          }
-                          placeholder="Low stock threshold"
-                          className="ui-input px-3 py-2 text-sm"
-                        />
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Current Qty</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={productDraft.stockQty}
+                            onChange={(event) =>
+                              setProductDraft((previous) => ({
+                                ...previous,
+                                stockQty: event.target.value,
+                              }))
+                            }
+                            placeholder="Stock qty"
+                            className="ui-input px-3 py-2 text-sm font-bold"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Low Threshold</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step="1"
+                            value={productDraft.stockThreshold}
+                            onChange={(event) =>
+                              setProductDraft((previous) => ({
+                                ...previous,
+                                stockThreshold: event.target.value,
+                              }))
+                            }
+                            placeholder="Threshold"
+                            className="ui-input px-3 py-2 text-sm font-bold"
+                          />
+                        </div>
                       </div>
                       <div className="grid grid-cols-[1fr_auto] gap-2">
                         <input
@@ -1232,12 +1266,12 @@ export function ManageScreen({
                             }))
                           }
                           placeholder="Image URL"
-                          className="ui-input px-3 py-2 text-sm"
+                          className="ui-input px-3 py-2 text-sm font-medium"
                         />
                         <button
                           onClick={() => imageFileInputRef.current?.click()}
                           type="button"
-                          className="ui-btn ui-btn-secondary px-3 py-2 text-sm text-slate-600"
+                          className="ui-btn ui-btn-secondary px-3 py-2 text-sm text-stone-600 hover:bg-stone-50"
                         >
                           Browse
                         </button>
@@ -1250,7 +1284,7 @@ export function ManageScreen({
                         />
                       </div>
                       {productDraft.image && (
-                        <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                        <div className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
                           <img
                             src={productDraft.image}
                             alt="Selected product"
@@ -1268,17 +1302,17 @@ export function ManageScreen({
                         }
                         rows={3}
                         placeholder="Description"
-                        className="ui-input w-full resize-none px-3 py-2 text-sm"
+                        className="ui-input w-full resize-none px-3 py-2 text-sm font-medium"
                       />
                       {productError && (
-                        <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-[#FC4A4A]">
+                        <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-500">
                           {productError}
                         </p>
                       )}
                       <button
                         onClick={submitProductForm}
                         disabled={!canManageCatalog || savingProduct}
-                        className="ui-btn ui-btn-primary inline-flex w-full items-center justify-center gap-2 px-3 py-2.5 text-sm disabled:bg-slate-300 disabled:shadow-none"
+                        className="ui-btn ui-btn-primary inline-flex w-full items-center justify-center gap-2 px-3 py-2.5 text-sm font-bold shadow-lg shadow-amber-900/10 disabled:bg-stone-200 disabled:shadow-none"
                       >
                         <Plus size={15} />
                         {savingProduct
@@ -1348,9 +1382,9 @@ export function ManageScreen({
                             <button
                               key={option.id}
                               onClick={() => setInventoryFilter(option.id)}
-                              className={`ui-btn rounded-md px-2.5 py-1 text-xs ${
+                              className={`ui-btn rounded-md px-2.5 py-1 text-xs transition-colors ${
                                 inventoryFilter === option.id
-                                  ? 'bg-[#2D71F8] text-white'
+                                  ? 'bg-[var(--ui-primary)] text-white shadow-sm'
                                   : 'text-slate-600 hover:bg-slate-100'
                               }`}
                             >
@@ -1360,14 +1394,14 @@ export function ManageScreen({
                         </div>
                       </div>
                     </div>
-                    <div className="max-h-[340px] overflow-y-auto rounded-xl border border-slate-100">
-                      <div className="grid grid-cols-[1.4fr_90px_90px_90px_90px_130px] gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <p>Name</p>
-                        <p>Category</p>
-                        <p>Price</p>
-                        <p>Stock</p>
-                        <p>Status</p>
-                        <p>Actions</p>
+                    <div className="max-h-[640px] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <div className="sticky top-0 z-10 grid grid-cols-[80px_1fr_100px_100px_100px_100px] gap-4 border-b border-slate-200 bg-slate-50/90 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 backdrop-blur-sm">
+                        <p>Image</p>
+                        <p>Product Details</p>
+                        <p className="text-center">Price</p>
+                        <p className="text-center">Stock</p>
+                        <p className="text-center">Status</p>
+                        <p className="text-right">Actions</p>
                       </div>
                       {filteredInventoryProducts.map((item) => {
                         const qty = Number(item.stockQty ?? 50)
@@ -1375,65 +1409,62 @@ export function ManageScreen({
                         const isOut = qty <= 0
                         const isLow = qty > 0 && qty <= threshold
                         return (
-                        <div
-                          key={item.id}
-                          className="grid grid-cols-[1.4fr_90px_90px_90px_90px_130px] gap-2 border-b border-slate-100 px-3 py-2 text-sm text-slate-700"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-slate-900">{item.name}</p>
-                            <p className="truncate text-xs text-slate-400">{item.label}</p>
+                          <div
+                            key={item.id}
+                            className="grid grid-cols-[80px_1fr_100px_100px_100px_100px] items-center gap-4 border-b border-slate-50 px-4 py-4 text-sm transition-colors hover:bg-slate-50/50"
+                          >
+                            <div className="h-14 w-14 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                className="h-full w-full object-cover transition-transform hover:scale-110"
+                                onError={(e) => { e.target.src = 'https://placehold.co/100x100?text=No+Image'; }}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-slate-800">{item.name}</p>
+                              <p className="truncate text-[11px] font-medium text-slate-400 uppercase tracking-tight">{item.category}</p>
+                              {item.label && item.label !== item.name && (
+                                <p className="truncate text-[10px] italic text-slate-400">"{item.label}"</p>
+                              )}
+                            </div>
+                            <p className="text-center font-bold text-slate-700">${Number(item.basePrice).toFixed(2)}</p>
+                            <p className={`text-center font-black ${isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-700'}`}>
+                              {qty}
+                            </p>
+                            <div className="flex justify-center">
+                              <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
+                                isOut ? 'bg-rose-50 text-rose-600 border-rose-100' : 
+                                isLow ? 'bg-amber-50 text-amber-600 border-amber-100' : 
+                                'bg-emerald-50 text-emerald-600 border-emerald-100'
+                              }`}>
+                                {isOut ? 'Out' : isLow ? 'Low' : 'Healthy'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => startEditProduct(item)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-[var(--ui-primary)] transition-all"
+                                title="Edit Product"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => removeProduct(item)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all"
+                                title="Delete Product"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </div>
-                          <p className="truncate">{item.category}</p>
-                          <p>{`$${Number(item.basePrice).toFixed(2)}`}</p>
-                          <p>{qty}</p>
-                          <p>
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                                isOut
-                                  ? 'bg-slate-200 text-slate-700'
-                                  : isLow
-                                    ? 'bg-[#2D71F8]/10 text-[#2D71F8]'
-                                    : 'bg-slate-100 text-slate-500'
-                              }`}
-                            >
-                              {isOut ? 'Out' : isLow ? 'Low' : 'Healthy'}
-                            </span>
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => updateProductStock(item, -1)}
-                              disabled={!canManageCatalog || stockUpdatingId === item.id}
-                              className="ui-btn ui-btn-secondary rounded-md px-1.5 py-1 text-[11px] text-slate-600"
-                            >
-                              -1
-                            </button>
-                            <button
-                              onClick={() => updateProductStock(item, 1)}
-                              disabled={!canManageCatalog || stockUpdatingId === item.id}
-                              className="ui-btn ui-btn-secondary rounded-md px-1.5 py-1 text-[11px] text-slate-600"
-                            >
-                              +1
-                            </button>
-                            <button
-                              onClick={() => startEditProduct(item)}
-                              disabled={!canManageCatalog}
-                              className="ui-btn ui-btn-secondary rounded-md p-1.5 text-slate-600"
-                            >
-                              <Pencil size={13} />
-                            </button>
-                            <button
-                              onClick={() => removeProduct(item)}
-                              disabled={!canManageCatalog}
-                              className="ui-btn ui-btn-danger rounded-md p-1.5 text-[#FC4A4A]"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      )})}
+                        )
+                      })}
                       {filteredInventoryProducts.length === 0 && (
-                        <div className="px-3 py-3 text-sm text-slate-400">
-                          No products match your search.
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                          <Package size={48} className="mb-4 opacity-10" />
+                          <p className="text-lg font-bold">No products found</p>
+                          <p className="text-sm">Try adjusting your search or filters.</p>
                         </div>
                       )}
                     </div>

@@ -62,10 +62,12 @@ export function OnlineOrderScreen() {
     return () => controller.abort()
   }, [])
 
-  const categories = useMemo(
-    () => [{ id: 'all', name: 'All', count: catalog.products.length }, ...catalog.categories],
-    [catalog.categories, catalog.products.length],
-  )
+  const categories = useMemo(() => {
+    const publicCategories = Array.isArray(catalog.categories)
+      ? catalog.categories.filter((item) => String(item?.id ?? '') !== 'all')
+      : []
+    return [{ id: 'all', name: 'All', count: catalog.products.length }, ...publicCategories]
+  }, [catalog.categories, catalog.products.length])
 
   useEffect(() => {
     if (categories.some((item) => item.id === activeCategory)) return

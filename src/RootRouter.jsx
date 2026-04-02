@@ -1,5 +1,6 @@
 import { Component, useEffect, useState } from 'react'
 import App from './App.jsx'
+import { CustomerAuthScreen } from './screens/CustomerAuthScreen.jsx'
 import { OfficialWebsiteScreen } from './screens/OfficialWebsiteScreen.jsx'
 import { OnlineOrderScreen } from './screens/OnlineOrderScreen.jsx'
 
@@ -55,10 +56,20 @@ export function RootRouter() {
 
   const isOnlineOrderPage = pathname.startsWith('/order') || pathname.startsWith('/online')
   const isPosPage = pathname.startsWith('/pos')
+  const isCheckoutPage = pathname.startsWith('/cart') || pathname.startsWith('/checkout')
+  const isCustomerAuthPage = pathname.startsWith('/account') || pathname.startsWith('/customer-login')
 
   return (
     <RootErrorBoundary>
-      {isOnlineOrderPage ? <OnlineOrderScreen /> : isPosPage ? <App /> : <OfficialWebsiteScreen />}
+      {isCustomerAuthPage ? (
+        <CustomerAuthScreen />
+      ) : isOnlineOrderPage ? (
+        <OnlineOrderScreen />
+      ) : isPosPage ? (
+        <App />
+      ) : (
+        <OfficialWebsiteScreen checkoutPage={isCheckoutPage} />
+      )}
     </RootErrorBoundary>
   )
 }

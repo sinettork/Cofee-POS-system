@@ -9,6 +9,20 @@ Coffee POS with:
 SQLite database:
 - `server/pos.sqlite` (auto-created and auto-seeded on first run)
 
+## Project Structure
+
+Core folders:
+
+- `src/` frontend app
+- `src/constants/` shared UI constants/static datasets
+- `server/` backend API
+- `server/database/` SQLite access + seed data
+- `server/routes/` isolated route helper modules
+- `docs/` project documentation
+
+Detailed tree and conventions:
+- `docs/PROJECT_STRUCTURE.md`
+
 ## Run
 
 1. Install dependencies:

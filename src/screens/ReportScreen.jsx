@@ -12,7 +12,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { fetchReportSummary } from '../api/client'
 import { HeaderChip, MetricCard, MiniMetric } from '../components/common'
-import { FAVORITES, REPORT_ORDER_ROWS } from '../uiData'
+import { FAVORITES, REPORT_ORDER_ROWS } from '../constants/uiData'
 import { formatCurrency, formatDate } from '../utils/format'
 
 export function ReportScreen({

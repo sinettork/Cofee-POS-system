@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { CATEGORY_SEED, ORDER_SEED, PRODUCT_SEED, TABLE_SEED } from './data.js'
+import { CATEGORY_SEED, ORDER_SEED, PRODUCT_SEED, TABLE_SEED } from './seeds.js'
 
 const DB_PATH = path.resolve(process.cwd(), 'server', 'pos.sqlite')
 
@@ -122,6 +122,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_role
     ON users(role);
 
+  CREATE TABLE IF NOT EXISTS customer_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    full_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    address TEXT NOT NULL DEFAULT '',
+    password_digest TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_accounts_email
+    ON customer_accounts(email)
+    WHERE email IS NOT NULL AND email != '';
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_accounts_phone
+    ON customer_accounts(phone)
+    WHERE phone IS NOT NULL AND phone != '';
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -155,6 +175,7 @@ seedIfEmpty()
 ensureOpeningInventoryMovements()
 ensureDefaultUsers()
 ensureDefaultSettings()
+ensureCustomerAccountColumns()
 
 function seedIfEmpty() {
   const categoryCount = db.prepare('SELECT COUNT(*) AS count FROM categories').get().count
@@ -286,6 +307,15 @@ function ensureProductColumns() {
   }
 }
 
+function ensureCustomerAccountColumns() {
+  const columns = db.prepare('PRAGMA table_info(customer_accounts)').all()
+  if (columns.length === 0) return
+  const hasAddress = columns.some((column) => column.name === 'address')
+  if (!hasAddress) {
+    db.exec("ALTER TABLE customer_accounts ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+  }
+}
+
 function ensureCatalogSeedExists() {
   const insertCategory = db.prepare('INSERT OR IGNORE INTO categories (id, name) VALUES (?, ?)')
   CATEGORY_SEED.forEach((item) => {
@@ -394,6 +424,20 @@ function mapUserRow(row) {
   }
 }
 
+function mapCustomerAccountRow(row) {
+  if (!row) return null
+  return {
+    id: Number(row.id),
+    fullName: row.full_name,
+    email: row.email || '',
+    phone: row.phone || '',
+    address: row.address || '',
+    active: Boolean(row.active),
+    createdAt: row.created_at,
+    lastLoginAt: row.last_login_at ?? null,
+  }
+}
+
 export function getProductCatalog() {
   const categories = db
     .prepare(
@@ -419,6 +463,41 @@ export function getProductCatalog() {
     )
     .all()
     .map((row) => mapProductRow(row))
+
+  return { categories, products }
+}
+
+export function getCatalogSnapshot() {
+  const products = db
+    .prepare(
+      `
+      SELECT
+        id, name, category_id AS category, label, base_price AS basePrice,
+        stock_qty AS stockQty, stock_threshold AS stockThreshold,
+        image, description, customizable, options_json
+      FROM products
+      ORDER BY id
+    `,
+    )
+    .all()
+    .map((row) => mapProductRow(row))
+
+  const categories = db
+    .prepare(
+      `
+      SELECT c.id, c.name, COUNT(p.id) AS count
+      FROM categories c
+      LEFT JOIN products p ON p.category_id = c.id
+      GROUP BY c.id, c.name
+      ORDER BY c.id
+    `,
+    )
+    .all()
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      count: row.id === 'all' ? products.length : Number(row.count),
+    }))
 
   return { categories, products }
 }
@@ -503,6 +582,137 @@ export function verifyUserCredentials(username, password) {
   const digest = hashPassword(password, row.username)
   if (digest !== row.password_digest) return null
   return mapUserRow(row)
+}
+
+export function getCustomerAccountById(id) {
+  const numericId = Number(id)
+  if (!Number.isFinite(numericId) || numericId <= 0) return null
+  const row = db
+    .prepare(
+      `
+      SELECT id, full_name, email, phone, active, created_at, last_login_at
+           , address
+      FROM customer_accounts
+      WHERE id = ?
+      LIMIT 1
+    `,
+    )
+    .get(Math.floor(numericId))
+  return mapCustomerAccountRow(row)
+}
+
+export function createCustomerAccount(payload) {
+  const fullName = String(payload?.fullName ?? '').trim()
+  const email = normalizeCustomerEmail(payload?.email)
+  const phone = normalizeCustomerPhone(payload?.phone)
+  const address = String(payload?.address ?? '').trim().slice(0, 300)
+  const password = String(payload?.password ?? '')
+  if (!fullName) {
+    throw createDomainError('CUSTOMER_NAME_REQUIRED', 'fullName is required.')
+  }
+  if (!email && !phone) {
+    throw createDomainError('CUSTOMER_CONTACT_REQUIRED', 'email or phone is required.')
+  }
+  if (password.length < 6) {
+    throw createDomainError('CUSTOMER_PASSWORD_TOO_SHORT', 'Password must be at least 6 characters.')
+  }
+  const createdAt = new Date().toISOString()
+  const identity = email || phone
+  try {
+    const result = db
+      .prepare(
+        `
+        INSERT INTO customer_accounts (
+          full_name, email, phone, address, password_digest, active, created_at
+        ) VALUES (?, ?, ?, ?, ?, 1, ?)
+      `,
+      )
+      .run(
+        fullName.slice(0, 80),
+        email || null,
+        phone || null,
+        address,
+        hashCustomerPassword(password, identity),
+        createdAt,
+      )
+    return getCustomerAccountById(Number(result.lastInsertRowid))
+  } catch (error) {
+    const message = String(error?.message ?? '')
+    if (message.includes('idx_customer_accounts_email') || message.includes('customer_accounts.email')) {
+      throw createDomainError('CUSTOMER_EMAIL_EXISTS', 'Email is already registered.')
+    }
+    if (message.includes('idx_customer_accounts_phone') || message.includes('customer_accounts.phone')) {
+      throw createDomainError('CUSTOMER_PHONE_EXISTS', 'Phone number is already registered.')
+    }
+    throw error
+  }
+}
+
+export function verifyCustomerCredentials(login, password) {
+  const normalizedEmail = normalizeCustomerEmail(login)
+  const normalizedPhone = normalizeCustomerPhone(login)
+  if (!normalizedEmail && !normalizedPhone) return null
+  const row = db
+    .prepare(
+      `
+      SELECT id, full_name, email, phone, active, created_at, last_login_at, password_digest
+           , address
+      FROM customer_accounts
+      WHERE (LOWER(email) = ? AND ? != '')
+         OR (phone = ? AND ? != '')
+      LIMIT 1
+    `,
+    )
+    .get(normalizedEmail, normalizedEmail, normalizedPhone, normalizedPhone)
+  if (!row || !row.active) return null
+  const identity = normalizedEmail || normalizedPhone
+  const digest = hashCustomerPassword(password, identity)
+  if (digest !== row.password_digest) return null
+  const now = new Date().toISOString()
+  db.prepare('UPDATE customer_accounts SET last_login_at = ? WHERE id = ?').run(now, row.id)
+  return {
+    ...mapCustomerAccountRow({
+      ...row,
+      last_login_at: now,
+    }),
+  }
+}
+
+export function updateCustomerAccount(customerId, payload) {
+  const existing = getCustomerAccountById(customerId)
+  if (!existing) return null
+
+  const nextFullName = String(payload?.fullName ?? existing.fullName).trim().slice(0, 80)
+  const nextEmail = normalizeCustomerEmail(payload?.email ?? existing.email)
+  const nextPhone = normalizeCustomerPhone(payload?.phone ?? existing.phone)
+  const nextAddress = String(payload?.address ?? existing.address ?? '').trim().slice(0, 300)
+  if (!nextFullName) {
+    throw createDomainError('CUSTOMER_NAME_REQUIRED', 'fullName is required.')
+  }
+  if (!nextEmail && !nextPhone) {
+    throw createDomainError('CUSTOMER_CONTACT_REQUIRED', 'email or phone is required.')
+  }
+
+  try {
+    db.prepare(
+      `
+      UPDATE customer_accounts
+      SET full_name = ?, email = ?, phone = ?, address = ?
+      WHERE id = ?
+    `,
+    ).run(nextFullName, nextEmail || null, nextPhone || null, nextAddress, Number(customerId))
+  } catch (error) {
+    const message = String(error?.message ?? '')
+    if (message.includes('idx_customer_accounts_email') || message.includes('customer_accounts.email')) {
+      throw createDomainError('CUSTOMER_EMAIL_EXISTS', 'Email is already registered.')
+    }
+    if (message.includes('idx_customer_accounts_phone') || message.includes('customer_accounts.phone')) {
+      throw createDomainError('CUSTOMER_PHONE_EXISTS', 'Phone number is already registered.')
+    }
+    throw error
+  }
+
+  return getCustomerAccountById(customerId)
 }
 
 export function createProduct(payload) {
@@ -617,32 +827,7 @@ export function deleteProduct(productId) {
 }
 
 export function getBootstrapData() {
-  const products = db
-    .prepare(`
-      SELECT
-        id, name, category_id AS category, label, base_price AS basePrice,
-        stock_qty AS stockQty, stock_threshold AS stockThreshold,
-        image, description, customizable, options_json
-      FROM products
-      ORDER BY id
-    `)
-    .all()
-    .map((row) => mapProductRow(row))
-
-  const categories = db
-    .prepare(`
-      SELECT c.id, c.name, COUNT(p.id) AS count
-      FROM categories c
-      LEFT JOIN products p ON p.category_id = c.id
-      GROUP BY c.id, c.name
-      ORDER BY c.id
-    `)
-    .all()
-    .map((row) => ({
-      id: row.id,
-      name: row.name,
-      count: row.id === 'all' ? products.length : Number(row.count),
-    }))
+  const { categories, products } = getCatalogSnapshot()
 
   const billingQueue = db
     .prepare(`
@@ -1206,11 +1391,34 @@ function createDomainError(code, message) {
   return error
 }
 
+function normalizeCustomerEmail(value) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (!normalized) return ''
+  if (!normalized.includes('@')) return ''
+  return normalized.slice(0, 120)
+}
+
+function normalizeCustomerPhone(value) {
+  const normalized = String(value ?? '')
+    .trim()
+    .replace(/[^\d+]/g, '')
+    .slice(0, 25)
+  return normalized
+}
+
 function hashPassword(password, username = '') {
   const safePassword = String(password ?? '')
   const safeUsername = String(username ?? '').trim().toLowerCase()
   return createHash('sha256')
     .update(`${safeUsername}|${safePassword}|${AUTH_PEPPER}`)
+    .digest('hex')
+}
+
+function hashCustomerPassword(password, identity = '') {
+  const safePassword = String(password ?? '')
+  const safeIdentity = String(identity ?? '').trim().toLowerCase()
+  return createHash('sha256')
+    .update(`customer|${safeIdentity}|${safePassword}|${AUTH_PEPPER}`)
     .digest('hex')
 }
 

@@ -33,7 +33,7 @@ import {
   REPORT_ORDER_ROWS,
   TABLE_GROUPS,
   TRACKING_ORDERS,
-} from './uiData'
+} from './constants/uiData'
 
 const ROLE_PAGE_ACCESS = {
   admin: ['pos', 'activity', 'report', 'inventory', 'teams', 'settings'],

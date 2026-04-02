@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { CURRENCY as KHQRCurrency, KHQR, TAG } from 'ts-khqr'
 import {
+  createCustomerAccount,
   createCategory,
   createKhqrTransaction,
   createOrder,
@@ -12,16 +13,20 @@ import {
   deleteProduct,
   getKhqrTransactionByMd5,
   getBootstrapData,
+  getCatalogSnapshot,
   getInventoryMovements,
   getProductById,
   getProductCatalog,
   getReportSummary,
+  getCustomerAccountById,
   getUserByUsername,
+  updateCustomerAccount,
   updateKhqrTransactionStatus,
   updateOrderStatus,
   updateProduct,
+  verifyCustomerCredentials,
   verifyUserCredentials,
-} from './db.js'
+} from './database/db.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 4000)
@@ -36,7 +41,9 @@ const ROLE_CATALOG_MANAGER = ['admin', 'manager']
 const ROLE_OPERATOR = ['admin', 'manager', 'cashier']
 const ROLE_ADMIN = ['admin']
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12
+const CUSTOMER_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14
 const sessionStore = new Map()
+const customerSessionStore = new Map()
 const ENV_FILE_PATH = path.resolve(process.cwd(), '.env')
 
 reloadEnvFromDotFile()
@@ -53,23 +60,7 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/public/catalog', (_req, res) => {
   try {
-    const catalog = getProductCatalog()
-    const products = catalog.products
-      .filter((item) => Number(item.stockQty ?? 0) > 0)
-      .sort((left, right) => String(left.name).localeCompare(String(right.name)))
-    const countByCategory = new Map()
-    products.forEach((product) => {
-      const key = String(product.category ?? '')
-      if (!key) return
-      countByCategory.set(key, Number(countByCategory.get(key) ?? 0) + 1)
-    })
-    const categories = catalog.categories
-      .filter((category) => countByCategory.has(String(category.id)))
-      .map((category) => ({
-        id: category.id,
-        name: category.name,
-        count: Number(countByCategory.get(String(category.id)) ?? 0),
-      }))
+    const { categories, products } = getCatalogSnapshot()
     const taxRateValue = db.prepare("SELECT value FROM settings WHERE key = 'taxRate' LIMIT 1").get()?.value
     const parsedTaxRate = Number(taxRateValue ?? 10)
     const taxRate = Number.isFinite(parsedTaxRate) ? Math.max(0, parsedTaxRate) : 10
@@ -84,8 +75,53 @@ app.get('/api/public/catalog', (_req, res) => {
   }
 })
 
+app.get('/api/public/payment-config', (_req, res) => {
+  reloadEnvFromDotFile()
+  const accountID = readEnvValue(['BAKONG_ACCOUNT_ID', 'BAKONG_ACCOUNTID', 'accountID', 'accountId'])
+  const merchantName = readEnvValue(['BAKONG_MERCHANT_NAME'], 'Bakehouse POS')
+  const merchantCity = readEnvValue(['BAKONG_MERCHANT_CITY'], 'Phnom Penh')
+  const merchantTag = readEnvValue(['BAKONG_MERCHANT_TAG'], 'INDIVIDUAL').toUpperCase()
+  const staticQrFromEnv = readEnvValue(['PUBLIC_KHQR_QR', 'WEBSITE_KHQR_QR'])
+  let qr = staticQrFromEnv
+
+  if (!qr && accountID) {
+    const generated = KHQR.generate({
+      tag: merchantTag === 'MERCHANT' ? TAG.MERCHANT : TAG.INDIVIDUAL,
+      accountID,
+      merchantName,
+      merchantCity,
+      currency: KHQRCurrency.USD,
+      additionalData: {
+        storeLabel: String(process.env.BAKONG_STORE_LABEL ?? 'Bakehouse'),
+      },
+    })
+    if (generated?.data?.qr && Number(generated?.status?.code ?? -1) === 0) {
+      qr = String(generated.data.qr)
+    }
+  }
+
+  res.json({
+    cashLabel: 'Cash on Delivery',
+    khqr: {
+      enabled: Boolean(qr),
+      qr: qr || '',
+      merchantName,
+      merchantCity,
+      accountId: accountID || '',
+    },
+  })
+})
+
 app.post('/api/public/orders', (req, res) => {
-  const payload = parsePublicOnlineOrderPayload(req.body ?? {})
+  const customerSession = readCustomerSession(req)
+  if (!customerSession) {
+    res.status(401).json({ error: 'Customer login is required before checkout.' })
+    return
+  }
+  const payload = parsePublicOnlineOrderPayload({
+    ...(req.body ?? {}),
+    customerName: String(req.body?.customerName ?? customerSession.fullName ?? '').trim(),
+  })
   if (!payload.ok) {
     res.status(400).json({ error: payload.error })
     return
@@ -97,8 +133,12 @@ app.post('/api/public/orders', (req, res) => {
       orderId: result.orderId,
       orderNumber: result.orderNumber,
       status: 'Active',
-      paymentStatus: 'Unpaid',
-      message: 'Order received. Please wait for shop confirmation.',
+      paymentMethod: payload.value.paymentMethod,
+      paymentStatus: payload.value.paymentStatus,
+      message:
+        payload.value.paymentStatus === 'Paid'
+          ? 'Payment processed and order received.'
+          : 'Order received. Please wait for shop confirmation.',
     })
   } catch (error) {
     if (error?.code === 'PRODUCT_NOT_FOUND' || error?.code === 'INSUFFICIENT_STOCK') {
@@ -141,6 +181,176 @@ app.post('/api/auth/login', (req, res) => {
       role: user.role,
     },
   })
+})
+
+app.post('/api/public/khqr/generate', (req, res) => {
+  handleKhqrGenerateRequest(req, res)
+})
+
+app.get('/api/public/khqr/status/:md5', async (req, res) => {
+  await handleKhqrStatusRequest(req, res)
+})
+
+app.post('/api/public/customers/register', (req, res) => {
+  const fullName = String(req.body?.fullName ?? '').trim()
+  const email = String(req.body?.email ?? '').trim()
+  const phone = String(req.body?.phone ?? '').trim()
+  const address = String(req.body?.address ?? '').trim()
+  const password = String(req.body?.password ?? '')
+  if (!fullName) {
+    res.status(400).json({ error: 'fullName is required.' })
+    return
+  }
+  if (!email && !phone) {
+    res.status(400).json({ error: 'email or phone is required.' })
+    return
+  }
+  if (password.length < 6) {
+    res.status(400).json({ error: 'Password must be at least 6 characters.' })
+    return
+  }
+  try {
+    const customer = createCustomerAccount({
+      fullName,
+      email,
+      phone,
+      address,
+      password,
+    })
+    const { token, expiresAt } = createCustomerSession(customer)
+    res.status(201).json({
+      token,
+      expiresAt,
+      customer: {
+        id: customer.id,
+        fullName: customer.fullName,
+        email: customer.email,
+        phone: customer.phone,
+        address: customer.address || '',
+      },
+    })
+  } catch (error) {
+    const code = String(error?.code ?? '')
+    if (
+      code === 'CUSTOMER_NAME_REQUIRED' ||
+      code === 'CUSTOMER_CONTACT_REQUIRED' ||
+      code === 'CUSTOMER_PASSWORD_TOO_SHORT'
+    ) {
+      res.status(400).json({ error: String(error.message) })
+      return
+    }
+    if (code === 'CUSTOMER_EMAIL_EXISTS' || code === 'CUSTOMER_PHONE_EXISTS') {
+      res.status(409).json({ error: String(error.message) })
+      return
+    }
+    res.status(500).json({ error: 'Unable to register customer account.', details: String(error.message) })
+  }
+})
+
+app.post('/api/public/customers/login', (req, res) => {
+  const login = String(req.body?.login ?? '').trim()
+  const password = String(req.body?.password ?? '')
+  if (!login || !password) {
+    res.status(400).json({ error: 'login and password are required.' })
+    return
+  }
+  const customer = verifyCustomerCredentials(login, password)
+  if (!customer) {
+    res.status(401).json({ error: 'Invalid phone/email or password.' })
+    return
+  }
+  const { token, expiresAt } = createCustomerSession(customer)
+  res.status(200).json({
+    token,
+    expiresAt,
+    customer: {
+      id: customer.id,
+      fullName: customer.fullName,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address || '',
+    },
+  })
+})
+
+app.get('/api/public/customers/me', (req, res) => {
+  const session = readCustomerSession(req)
+  if (!session) {
+    res.status(401).json({ error: 'Customer session not found.' })
+    return
+  }
+  const customer = getCustomerAccountById(session.customerId)
+  if (!customer || !customer.active) {
+    customerSessionStore.delete(session.token)
+    res.status(401).json({ error: 'Customer session is no longer valid.' })
+    return
+  }
+  res.json({
+    customer: {
+      id: customer.id,
+      fullName: customer.fullName,
+      email: customer.email,
+      phone: customer.phone,
+      address: customer.address || '',
+    },
+    expiresAt: session.expiresAt,
+  })
+})
+
+app.patch('/api/public/customers/me', (req, res) => {
+  const session = readCustomerSession(req)
+  if (!session) {
+    res.status(401).json({ error: 'Customer session not found.' })
+    return
+  }
+  try {
+    const customer = updateCustomerAccount(session.customerId, {
+      fullName: req.body?.fullName,
+      email: req.body?.email,
+      phone: req.body?.phone,
+      address: req.body?.address,
+    })
+    if (!customer) {
+      customerSessionStore.delete(session.token)
+      res.status(404).json({ error: 'Customer account not found.' })
+      return
+    }
+    customerSessionStore.set(session.token, {
+      ...session,
+      fullName: customer.fullName,
+      email: customer.email,
+      phone: customer.phone,
+    })
+    res.json({
+      customer: {
+        id: customer.id,
+        fullName: customer.fullName,
+        email: customer.email,
+        phone: customer.phone,
+        address: customer.address || '',
+      },
+    })
+  } catch (error) {
+    const code = String(error?.code ?? '')
+    if (
+      code === 'CUSTOMER_NAME_REQUIRED' ||
+      code === 'CUSTOMER_CONTACT_REQUIRED'
+    ) {
+      res.status(400).json({ error: String(error.message) })
+      return
+    }
+    if (code === 'CUSTOMER_EMAIL_EXISTS' || code === 'CUSTOMER_PHONE_EXISTS') {
+      res.status(409).json({ error: String(error.message) })
+      return
+    }
+    res.status(500).json({ error: 'Unable to update customer profile.', details: String(error.message) })
+  }
+})
+
+app.post('/api/public/customers/logout', (req, res) => {
+  const token = readCustomerSessionToken(req)
+  if (token) customerSessionStore.delete(token)
+  res.json({ ok: true })
 })
 
 app.use('/api', requireAuth)
@@ -357,172 +567,11 @@ app.post('/api/orders', requireRoles(ROLE_OPERATOR), (req, res) => {
 })
 
 app.post('/api/khqr/generate', requireRoles(ROLE_OPERATOR), (req, res) => {
-  reloadEnvFromDotFile()
-  const currency = sanitizeCurrency(req.body?.currency)
-  const rawAmount = Number(req.body?.amount ?? 0)
-  const amount = normalizeKhqrAmount(rawAmount, currency)
-  const incomingBillNumber = String(req.body?.billNumber ?? '').trim()
-  const billNumber = incomingBillNumber || createBillNumber()
-  const accountID = readEnvValue(['BAKONG_ACCOUNT_ID', 'BAKONG_ACCOUNTID', 'accountID', 'accountId'])
-  const merchantName = readEnvValue(['BAKONG_MERCHANT_NAME'], 'Bakehouse POS')
-  const merchantCity = readEnvValue(['BAKONG_MERCHANT_CITY'], 'Phnom Penh')
-  const merchantTag = readEnvValue(['BAKONG_MERCHANT_TAG'], 'INDIVIDUAL').toUpperCase()
-
-  if (!accountID) {
-    res.status(500).json({
-      error: 'Bakong account id is missing. Set BAKONG_ACCOUNT_ID (or accountID/accountId) in .env or server environment.',
-    })
-    return
-  }
-  if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
-    res.status(400).json({ error: 'amount must be a positive number.' })
-    return
-  }
-
-  const expiresAt = new Date(Date.now() + KHQR_EXPIRE_MS)
-  const generation = KHQR.generate({
-    tag: merchantTag === 'MERCHANT' ? TAG.MERCHANT : TAG.INDIVIDUAL,
-    accountID,
-    merchantName,
-    merchantCity,
-    currency: currency === 'KHR' ? KHQRCurrency.KHR : KHQRCurrency.USD,
-    amount,
-    expirationTimestamp: expiresAt.getTime(),
-    additionalData: {
-      billNumber,
-      storeLabel: String(process.env.BAKONG_STORE_LABEL ?? 'Bakehouse'),
-    },
-  })
-
-  if (!generation || Number(generation.status?.code ?? -1) !== 0 || !generation.data?.qr || !generation.data?.md5) {
-    res.status(400).json({
-      error: String(generation?.status?.message ?? 'Unable to generate KHQR payload.'),
-      details: generation?.status ?? null,
-    })
-    return
-  }
-
-  try {
-    createKhqrTransaction({
-      billNumber,
-      md5: generation.data.md5,
-      qrString: generation.data.qr,
-      amount,
-      currency,
-      status: 'UNPAID',
-      createdAt: new Date().toISOString(),
-      expiresAt: expiresAt.toISOString(),
-    })
-  } catch (error) {
-    if (String(error.message).includes('UNIQUE constraint failed: khqr_transactions.bill_number')) {
-      res.status(409).json({ error: `billNumber "${billNumber}" already exists.` })
-      return
-    }
-    if (String(error.message).includes('UNIQUE constraint failed: khqr_transactions.md5')) {
-      res.status(409).json({ error: 'Generated md5 is duplicated. Please retry.' })
-      return
-    }
-    res.status(500).json({ error: 'Failed to store KHQR transaction.', details: String(error.message) })
-    return
-  }
-
-  res.json({
-    billNumber,
-    qr: generation.data.qr,
-    md5: generation.data.md5,
-    amount,
-    currency,
-    expiresAt: expiresAt.toISOString(),
-  })
+  handleKhqrGenerateRequest(req, res)
 })
 
 app.get('/api/khqr/status/:md5', requireRoles(ROLE_OPERATOR), async (req, res) => {
-  reloadEnvFromDotFile()
-  const md5 = String(req.params.md5 ?? '').trim()
-  if (!md5) {
-    res.status(400).json({ error: 'md5 is required.' })
-    return
-  }
-  const transaction = getKhqrTransactionByMd5(md5)
-  if (!transaction) {
-    res.status(404).json({ error: 'KHQR transaction not found.' })
-    return
-  }
-  if (transaction.status === 'PAID') {
-    res.json({
-      paid: true,
-      status: 'PAID',
-      billNumber: transaction.billNumber,
-      md5: transaction.md5,
-      amount: transaction.amount,
-      currency: transaction.currency,
-      paidAt: transaction.paidAt,
-    })
-    return
-  }
-
-  const now = new Date()
-  const expiresAt = new Date(transaction.expiresAt)
-  if (!Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() <= now.getTime()) {
-    updateKhqrTransactionStatus(md5, {
-      status: 'EXPIRED',
-      lastCheckedAt: now.toISOString(),
-      checkResponseJson: transaction.checkResponseJson || '{}',
-    })
-    res.json({
-      paid: false,
-      status: 'EXPIRED',
-      billNumber: transaction.billNumber,
-      md5: transaction.md5,
-      amount: transaction.amount,
-      currency: transaction.currency,
-      expired: true,
-    })
-    return
-  }
-
-  const token = readEnvValue(['BAKONG_TOKEN'])
-  if (!token) {
-    res.status(500).json({ error: 'BAKONG_TOKEN is missing in server environment.' })
-    return
-  }
-
-  let rawStatus
-  try {
-    const response = await fetch(BAKONG_CHECK_BY_MD5_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ md5 }),
-    })
-    rawStatus = await response.json()
-  } catch (error) {
-    res.status(502).json({ error: 'Failed to reach Bakong status API.', details: String(error.message) })
-    return
-  }
-
-  const responseCode = Number(rawStatus?.responseCode ?? rawStatus?.status?.code ?? -1)
-  const paid = responseCode === 0
-  const nextStatus = paid ? 'PAID' : 'UNPAID'
-  const checkedAt = new Date().toISOString()
-  updateKhqrTransactionStatus(md5, {
-    status: nextStatus,
-    paidAt: paid ? checkedAt : null,
-    lastCheckedAt: checkedAt,
-    checkResponseJson: safeJsonStringify(rawStatus),
-  })
-
-  res.json({
-    paid,
-    status: nextStatus,
-    billNumber: transaction.billNumber,
-    md5: transaction.md5,
-    amount: transaction.amount,
-    currency: transaction.currency,
-    data: rawStatus,
-  })
+  await handleKhqrStatusRequest(req, res)
 })
 
 app.patch('/api/orders/:orderNumber/status', requireRoles(ROLE_OPERATOR), (req, res) => {
@@ -999,6 +1048,175 @@ function roundCurrency(value, currency) {
   return Number(value.toFixed(fractionDigits))
 }
 
+function handleKhqrGenerateRequest(req, res) {
+  reloadEnvFromDotFile()
+  const currency = sanitizeCurrency(req.body?.currency)
+  const rawAmount = Number(req.body?.amount ?? 0)
+  const amount = normalizeKhqrAmount(rawAmount, currency)
+  const incomingBillNumber = String(req.body?.billNumber ?? '').trim()
+  const billNumber = incomingBillNumber || createBillNumber()
+  const accountID = readEnvValue(['BAKONG_ACCOUNT_ID', 'BAKONG_ACCOUNTID', 'accountID', 'accountId'])
+  const merchantName = readEnvValue(['BAKONG_MERCHANT_NAME'], 'Bakehouse POS')
+  const merchantCity = readEnvValue(['BAKONG_MERCHANT_CITY'], 'Phnom Penh')
+  const merchantTag = readEnvValue(['BAKONG_MERCHANT_TAG'], 'INDIVIDUAL').toUpperCase()
+
+  if (!accountID) {
+    res.status(500).json({
+      error: 'Bakong account id is missing. Set BAKONG_ACCOUNT_ID (or accountID/accountId) in .env or server environment.',
+    })
+    return
+  }
+  if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+    res.status(400).json({ error: 'amount must be a positive number.' })
+    return
+  }
+
+  const expiresAt = new Date(Date.now() + KHQR_EXPIRE_MS)
+  const generation = KHQR.generate({
+    tag: merchantTag === 'MERCHANT' ? TAG.MERCHANT : TAG.INDIVIDUAL,
+    accountID,
+    merchantName,
+    merchantCity,
+    currency: currency === 'KHR' ? KHQRCurrency.KHR : KHQRCurrency.USD,
+    amount,
+    expirationTimestamp: expiresAt.getTime(),
+    additionalData: {
+      billNumber,
+      storeLabel: String(process.env.BAKONG_STORE_LABEL ?? 'Bakehouse'),
+    },
+  })
+
+  if (!generation || Number(generation.status?.code ?? -1) !== 0 || !generation.data?.qr || !generation.data?.md5) {
+    res.status(400).json({
+      error: String(generation?.status?.message ?? 'Unable to generate KHQR payload.'),
+      details: generation?.status ?? null,
+    })
+    return
+  }
+
+  try {
+    createKhqrTransaction({
+      billNumber,
+      md5: generation.data.md5,
+      qrString: generation.data.qr,
+      amount,
+      currency,
+      status: 'UNPAID',
+      createdAt: new Date().toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    })
+  } catch (error) {
+    if (String(error.message).includes('UNIQUE constraint failed: khqr_transactions.bill_number')) {
+      res.status(409).json({ error: `billNumber "${billNumber}" already exists.` })
+      return
+    }
+    if (String(error.message).includes('UNIQUE constraint failed: khqr_transactions.md5')) {
+      res.status(409).json({ error: 'Generated md5 is duplicated. Please retry.' })
+      return
+    }
+    res.status(500).json({ error: 'Failed to store KHQR transaction.', details: String(error.message) })
+    return
+  }
+
+  res.json({
+    billNumber,
+    qr: generation.data.qr,
+    md5: generation.data.md5,
+    amount,
+    currency,
+    expiresAt: expiresAt.toISOString(),
+  })
+}
+
+async function handleKhqrStatusRequest(req, res) {
+  reloadEnvFromDotFile()
+  const md5 = String(req.params.md5 ?? '').trim()
+  if (!md5) {
+    res.status(400).json({ error: 'md5 is required.' })
+    return
+  }
+  const transaction = getKhqrTransactionByMd5(md5)
+  if (!transaction) {
+    res.status(404).json({ error: 'KHQR transaction not found.' })
+    return
+  }
+  if (transaction.status === 'PAID') {
+    res.json({
+      paid: true,
+      status: 'PAID',
+      billNumber: transaction.billNumber,
+      md5: transaction.md5,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      paidAt: transaction.paidAt,
+    })
+    return
+  }
+
+  const now = new Date()
+  const expiresAt = new Date(transaction.expiresAt)
+  if (!Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() <= now.getTime()) {
+    updateKhqrTransactionStatus(md5, {
+      status: 'EXPIRED',
+      lastCheckedAt: now.toISOString(),
+      checkResponseJson: transaction.checkResponseJson || '{}',
+    })
+    res.json({
+      paid: false,
+      status: 'EXPIRED',
+      billNumber: transaction.billNumber,
+      md5: transaction.md5,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      expired: true,
+    })
+    return
+  }
+
+  const token = readEnvValue(['BAKONG_TOKEN'])
+  if (!token) {
+    res.status(500).json({ error: 'BAKONG_TOKEN is missing in server environment.' })
+    return
+  }
+
+  let rawStatus
+  try {
+    const response = await fetch(BAKONG_CHECK_BY_MD5_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ md5 }),
+    })
+    rawStatus = await response.json()
+  } catch (error) {
+    res.status(502).json({ error: 'Failed to reach Bakong status API.', details: String(error.message) })
+    return
+  }
+
+  const responseCode = Number(rawStatus?.responseCode ?? rawStatus?.status?.code ?? -1)
+  const paid = responseCode === 0
+  const nextStatus = paid ? 'PAID' : 'UNPAID'
+  const checkedAt = new Date().toISOString()
+  updateKhqrTransactionStatus(md5, {
+    status: nextStatus,
+    paidAt: paid ? checkedAt : null,
+    lastCheckedAt: checkedAt,
+    checkResponseJson: safeJsonStringify(rawStatus),
+  })
+
+  res.json({
+    paid,
+    status: nextStatus,
+    billNumber: transaction.billNumber,
+    md5: transaction.md5,
+    amount: transaction.amount,
+    currency: transaction.currency,
+    data: rawStatus,
+  })
+}
+
 function parseCreateOrderPayload(source) {
   const customerName = String(source.customerName ?? '').trim()
   const tableName = String(source.tableName ?? '').trim()
@@ -1115,7 +1333,10 @@ function parseCreateOrderPayload(source) {
 function parsePublicOnlineOrderPayload(source) {
   const customerName = String(source.customerName ?? '').trim()
   const phone = String(source.phone ?? '').trim()
+  const address = String(source.address ?? '').trim()
   const note = String(source.note ?? '').trim()
+  const khqrMd5 = String(source.khqrMd5 ?? '').trim()
+  const selectedPaymentMethod = sanitizePaymentMethod(source.paymentMethod)
   if (!customerName) {
     return { ok: false, error: 'customerName is required.' }
   }
@@ -1145,7 +1366,6 @@ function parsePublicOnlineOrderPayload(source) {
   const taxRate = Number.isFinite(settingsTaxRate) ? Math.max(0, settingsTaxRate) / 100 : 0.1
 
   let subtotal = 0
-  let index = 0
   const items = []
   for (const [productId, quantity] of groupedItems.entries()) {
     const product = findProduct.get(productId)
@@ -1169,28 +1389,54 @@ function parsePublicOnlineOrderPayload(source) {
       itemPrice,
       totalPrice,
       selectedOptions: {},
-      notes: index === 0 && note ? `Online note: ${note.slice(0, 220)}` : '',
+      notes: '',
     })
-    index += 1
   }
 
   const normalizedSubtotal = Number(subtotal.toFixed(2))
   const tax = Number((normalizedSubtotal * taxRate).toFixed(2))
   const total = Number((normalizedSubtotal + tax).toFixed(2))
   const normalizedPhone = phone.replace(/\s+/g, ' ').slice(0, 30)
+  const normalizedAddress = address.replace(/\s+/g, ' ').slice(0, 220)
+  const firstItemNoteParts = []
+  if (note) firstItemNoteParts.push(`Online note: ${note.slice(0, 120)}`)
+  if (normalizedAddress) firstItemNoteParts.push(`Address: ${normalizedAddress}`)
+  if (normalizedPhone) firstItemNoteParts.push(`Phone: ${normalizedPhone}`)
+  if (items.length > 0 && firstItemNoteParts.length > 0) {
+    items[0].notes = firstItemNoteParts.join(' | ').slice(0, 240)
+  }
+
+  let paymentStatus = 'Unpaid'
+  let amountReceived = 0
+  let changeAmount = 0
+  if (selectedPaymentMethod === 'KHQR' && khqrMd5) {
+    const khqrTransaction = getKhqrTransactionByMd5(khqrMd5)
+    if (!khqrTransaction) {
+      return { ok: false, error: 'KHQR transaction not found.' }
+    }
+    if (String(khqrTransaction.status ?? '').toUpperCase() !== 'PAID') {
+      return { ok: false, error: 'KHQR payment is not completed yet.' }
+    }
+    const khqrAmount = Number(khqrTransaction.amount ?? 0)
+    if (!Number.isFinite(khqrAmount) || Math.abs(khqrAmount - total) > 0.01) {
+      return { ok: false, error: 'KHQR amount does not match order total.' }
+    }
+    paymentStatus = 'Paid'
+    amountReceived = total
+  }
 
   return {
     ok: true,
     value: {
       customerName: customerName.slice(0, 80),
-      tableName: normalizedPhone ? `Online (${normalizedPhone})` : 'Online',
+      tableName: normalizedPhone ? `Delivery (${normalizedPhone})` : 'Delivery',
       orderType: 'Take Away',
-      paymentMethod: 'Cash',
-      paymentStatus: 'Unpaid',
+      paymentMethod: selectedPaymentMethod,
+      paymentStatus,
       currency: 'USD',
       paymentCurrency: 'USD',
-      amountReceived: 0,
-      changeAmount: 0,
+      amountReceived,
+      changeAmount,
       subtotal: normalizedSubtotal,
       tax,
       discount: 0,
@@ -1204,7 +1450,45 @@ function createSessionToken() {
   return randomBytes(24).toString('hex')
 }
 
+function createCustomerSession(customer) {
+  const token = randomBytes(24).toString('hex')
+  const expiresAt = Date.now() + CUSTOMER_SESSION_TTL_MS
+  customerSessionStore.set(token, {
+    token,
+    customerId: Number(customer.id),
+    fullName: String(customer.fullName ?? ''),
+    email: String(customer.email ?? ''),
+    phone: String(customer.phone ?? ''),
+    expiresAt,
+  })
+  return { token, expiresAt }
+}
+
+function readCustomerSessionToken(req) {
+  const explicitHeaderToken = String(req.headers?.['x-customer-session'] ?? '').trim()
+  if (explicitHeaderToken) return explicitHeaderToken
+  return readBearerToken(req.headers?.authorization)
+}
+
+function readCustomerSession(req) {
+  const token = readCustomerSessionToken(req)
+  if (!token) return null
+  const session = customerSessionStore.get(token)
+  if (!session) return null
+  if (Date.now() > Number(session.expiresAt ?? 0)) {
+    customerSessionStore.delete(token)
+    return null
+  }
+  return session
+}
+
 function requireAuth(req, res, next) {
+  const requestPath = String(req.path ?? '')
+  if (requestPath.startsWith('/public/')) {
+    next()
+    return
+  }
+
   const token = readBearerToken(req.headers?.authorization)
   if (!token) {
     res.status(401).json({ error: 'Unauthorized.' })

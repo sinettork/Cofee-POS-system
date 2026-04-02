@@ -183,6 +183,7 @@ export function PaymentModal({
     if (!khqrData?.md5 || khqrSubmittingRef.current) return
 
     setKhqrPolling(true)
+    setFormError('')
 
     try {
       const status = await fetchKhqrStatus(khqrData.md5)
@@ -350,8 +351,8 @@ export function PaymentModal({
   if (receiptData) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-5">
-          <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]" />
-          <section className="ui-modal-card relative z-10 w-full max-w-[440px] p-4">
+          <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" />
+          <section className="ui-modal-card relative z-10 w-full max-w-[440px] p-4 rounded-[2.5rem]">
             <ReceiptView
                 data={receiptData}
                 onNewOrder={() => {
@@ -372,28 +373,28 @@ export function PaymentModal({
   if (step === 'method') {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-5">
-          <div onClick={onClose} className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]" />
-          <section className="ui-modal-card relative z-10 w-full max-w-[420px] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Payment</p>
+          <div onClick={onClose} className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" />
+          <section className="ui-modal-card relative z-10 w-full max-w-[420px] p-8 rounded-[2.5rem]">
+            <div className="mb-6 flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Payment</p>
               <button
                   onClick={onClose}
-                  className="ui-btn ui-btn-ghost ui-icon-btn h-8 w-8 text-slate-400 hover:text-slate-700"
+                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-50 text-stone-400 hover:bg-stone-800 hover:text-white transition-all"
               >
-                <X size={15} />
+                <X size={20} />
               </button>
             </div>
 
-            <h3 className="text-xl font-bold text-slate-900">Select Payment Method</h3>
+            <h3 className="text-2xl font-black text-stone-800 uppercase tracking-tight">Payment Method</h3>
 
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Amount Due</p>
-              <p className="mt-1 text-3xl font-black text-[#2D71F8]">
+            <div className="mt-6 rounded-3xl border border-stone-100 bg-stone-50/50 p-6">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Amount Due</p>
+              <p className="mt-1 text-4xl font-black text-[#7c4a32] tabular-nums">
                 {formatCurrency(totalAmount, currency)}
               </p>
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="mt-6 grid grid-cols-3 gap-3">
               {METHODS.map((method) => {
                 const Icon = method.icon
                 const active = selectedMethod === method.id
@@ -401,31 +402,31 @@ export function PaymentModal({
                     <button
                         key={method.id}
                         onClick={() => handleSelectMethod(method.id)}
-                        className={`rounded-xl border p-3 text-center transition-colors ${
+                        className={`flex flex-col items-center gap-3 rounded-2xl border-2 p-4 transition-all duration-300 ${
                             active
-                                ? 'border-[#2D71F8] bg-[#2D71F8]/5 text-[#2D71F8]'
-                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                ? 'border-[#7c4a32] bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10'
+                                : 'border-stone-100 bg-white text-stone-500 hover:border-stone-200 hover:bg-stone-50'
                         }`}
                     >
-                      <div className="mb-1.5 flex justify-center">
-                        <Icon size={20} />
-                      </div>
-                      <p className="text-sm font-semibold">{method.label}</p>
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${active ? 'bg-white/20' : 'bg-stone-50 text-stone-400'}`}>
+                           <Icon size={20} />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest">{method.label}</span>
                     </button>
                 )
               })}
             </div>
 
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-8 flex items-center gap-3">
               <button
                   onClick={onClose}
-                  className="ui-btn ui-btn-secondary px-3 py-2.5 text-sm text-slate-600"
+                  className="ui-btn ui-btn-secondary px-6 py-4 text-sm font-bold text-stone-600 hover:bg-stone-50"
               >
                 Cancel
               </button>
               <button
                   onClick={handleContinueFromMethod}
-                  className="ui-btn ui-btn-primary flex-1 px-3 py-2.5 text-sm"
+                  className="ui-btn ui-btn-primary flex-1 py-4 text-lg font-black uppercase tracking-tight shadow-xl shadow-amber-900/10 transition-all active:scale-[0.98]"
               >
                 Continue
               </button>
@@ -610,26 +611,26 @@ export function PaymentModal({
 
   return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-5">
-        <div onClick={onClose} className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]" />
-        <section className="ui-modal-card relative z-10 w-full max-w-[420px] p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Cash Payment</p>
+        <div onClick={onClose} className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" />
+        <section className="ui-modal-card relative z-10 w-full max-w-[420px] p-8 rounded-[2.5rem]">
+          <div className="mb-6 flex items-center justify-between">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Cash Payment</p>
             <button
                 onClick={onClose}
-                className="ui-btn ui-btn-ghost ui-icon-btn h-8 w-8 text-slate-400 hover:text-slate-700"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-50 text-stone-400 hover:bg-stone-800 hover:text-white transition-all"
             >
-              <X size={15} />
+              <X size={20} />
             </button>
           </div>
 
-          <div className="mb-3 rounded-xl border border-[#2D71F8]/20 bg-[#2D71F8]/[0.04] p-3.5">
-            <p className="text-xs font-medium text-[#2D71F8]/80">Amount due</p>
-            <p className="tabular-nums mt-1 text-4xl font-semibold tracking-tight text-[#2D71F8]">
+          <div className="mb-6 rounded-3xl border border-stone-100 bg-stone-50/50 p-6">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Amount due</p>
+            <p className="tabular-nums mt-1 text-4xl font-black tracking-tight text-[#7c4a32]">
               {formatCurrency(totalAmount, currency)}
             </p>
           </div>
 
-          <div className="mb-3 grid grid-cols-3 gap-2">
+          <div className="mb-6 grid grid-cols-3 gap-3">
             {METHODS.map((method) => (
                 <button
                     key={method.id}
@@ -643,10 +644,10 @@ export function PaymentModal({
                         setStep('card')
                       }
                     }}
-                    className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                    className={`rounded-2xl border-2 px-3 py-3 text-xs font-bold uppercase tracking-widest transition-all ${
                         selectedMethod === method.id
-                            ? 'border-[#2D71F8] bg-[#2D71F8]/5 text-[#2D71F8]'
-                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            ? 'border-[#7c4a32] bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10'
+                            : 'border-stone-100 bg-white text-stone-500 hover:border-stone-200 hover:bg-stone-50'
                     }`}
                 >
                   {method.label}
@@ -654,10 +655,10 @@ export function PaymentModal({
             ))}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3">
-            <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
-              <p className="font-medium">Received</p>
-              <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium">
+          <div className="rounded-3xl border border-stone-100 bg-white p-6 shadow-sm ring-1 ring-stone-100">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Received</p>
+              <p className="rounded-lg bg-stone-100 px-3 py-1 text-[10px] font-black text-stone-600">
                 {currency}
               </p>
             </div>
@@ -672,25 +673,25 @@ export function PaymentModal({
                   setAmountReceivedInput(event.target.value)
                   setFormError('')
                 }}
-                placeholder={`Enter paid amount (${currency})`}
-                className="ui-input mb-2 px-3 py-2.5 text-base font-medium tabular-nums text-slate-700"
+                placeholder={`Enter amount...`}
+                className="ui-input mb-4 px-4 py-4 text-2xl font-black tabular-nums text-stone-800 bg-stone-50/30"
             />
 
             {isCashPayment && hasAmountInput && isValidReceived && remainingAmount > 0 && (
-                <p className="mb-2 text-xs font-medium text-[#FC4A4A]">
+                <p className="mb-4 text-xs font-bold text-red-500">
                   Need {formatCurrency(remainingAmount, currency)} more.
                 </p>
             )}
 
             {!isValidReceived && hasAmountInput && (
-                <p className="mb-2 text-xs font-medium text-[#FC4A4A]">Invalid amount.</p>
+                <p className="mb-4 text-xs font-bold text-red-500">Invalid amount.</p>
             )}
 
-            <div className="mb-2 grid grid-cols-4 gap-2">
+            <div className="mb-6 grid grid-cols-4 gap-2">
               <button
                   onClick={() => applyQuickReceivedAmount('exact')}
                   disabled={!isCashPayment}
-                  className="ui-btn ui-btn-secondary h-8 rounded-xl px-2 text-xs font-medium text-slate-600"
+                  className="ui-btn ui-btn-secondary h-10 rounded-xl px-2 text-[10px] font-black uppercase tracking-widest text-stone-600 hover:bg-stone-50"
               >
                 Exact
               </button>
@@ -700,51 +701,53 @@ export function PaymentModal({
                       key={`cash-add-${value}`}
                       onClick={() => applyQuickReceivedAmount(value)}
                       disabled={!isCashPayment}
-                      className="ui-btn ui-btn-secondary h-8 rounded-xl px-2 text-xs font-medium text-slate-600"
+                      className="ui-btn ui-btn-secondary h-10 rounded-xl px-2 text-[10px] font-black uppercase tracking-widest text-stone-600 hover:bg-stone-50"
                   >
                     +{formatCurrency(value, currency)}
                   </button>
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-0 rounded-lg border border-slate-200 bg-slate-50/70">
-              <div className="border-r border-slate-200 px-3 py-2">
-                <p className="text-[11px] font-medium text-slate-400">Remaining</p>
+            <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-2xl border border-stone-100 bg-stone-50/50">
+              <div className="border-r border-stone-100 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Remaining</p>
                 <p
-                    className={`tabular-nums text-[26px] leading-none font-medium ${
-                        remainingAmount > 0 ? 'text-[#FC4A4A]' : 'text-slate-700'
+                    className={`tabular-nums text-2xl leading-tight font-black ${
+                        remainingAmount > 0 ? 'text-red-500' : 'text-stone-700'
                     }`}
                 >
                   {formatCurrency(remainingAmount, currency)}
                 </p>
               </div>
-
-              <div className="px-3 py-2">
-                <p className="text-[11px] font-medium text-slate-400">Change back</p>
-                <p className="tabular-nums text-[26px] leading-none font-medium text-[#1C8370]">
+              <div className="px-4 py-3 text-right">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Change back</p>
+                <p className="tabular-nums text-2xl leading-tight font-black text-[#1C8370]">
                   {formatCurrency(changeBackAmount, currency)}
                 </p>
               </div>
             </div>
-
-            {formError && <p className="mt-2 text-xs font-medium text-[#FC4A4A]">{formError}</p>}
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
+          {formError && (
+              <p className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-500">
+                {formError}
+              </p>
+          )}
+
+          <div className="mt-8 flex items-center gap-3">
             <button
                 onClick={() => setStep('method')}
                 disabled={loading}
-                className="ui-btn ui-btn-secondary px-3 py-2.5 text-sm text-slate-600"
+                className="ui-btn ui-btn-secondary px-6 py-4 text-sm font-bold text-stone-600 hover:bg-stone-50"
             >
               Back
             </button>
-
             <button
                 onClick={handleCashCharge}
                 disabled={!canChargeCash}
-                className="ui-btn ui-btn-primary flex-1 px-3 py-2.5 text-sm disabled:bg-slate-300 disabled:shadow-none"
+                className="ui-btn ui-btn-primary flex-1 py-4 text-lg font-black uppercase tracking-tight shadow-xl shadow-amber-900/10 transition-all active:scale-[0.98]"
             >
-              {loading ? 'Processing...' : 'Charge'}
+              {loading ? 'Processing...' : 'Charge Cash'}
             </button>
           </div>
         </section>

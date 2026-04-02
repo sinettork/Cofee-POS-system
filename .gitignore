@@ -18,6 +18,7 @@ dist-ssr
 .idea
 .ai/
 _starter/
+Cofee-POS-system/
 server/pos.sqlite
 server/pos.sqlite-shm
 server/pos.sqlite-wal

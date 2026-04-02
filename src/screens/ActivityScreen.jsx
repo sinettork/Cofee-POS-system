@@ -1,8 +1,8 @@
-import { CalendarDays, Menu, Power, Search } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, Loader2, Menu, Power, Search, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createTable, fetchOrderDetail, updateTableStatus } from '../api/client'
 import { HeaderChip, StatusDot } from '../components/common'
-import { BILLING_QUEUE, HISTORY_ROWS, TABLE_GROUPS, TRACKING_ORDERS } from '../uiData'
+import { BILLING_QUEUE, HISTORY_ROWS, TABLE_GROUPS, TRACKING_ORDERS } from '../constants/uiData'
 import { formatCurrency, formatDate } from '../utils/format'
 
 export function ActivityScreen({
@@ -155,6 +155,7 @@ export function ActivityScreen({
 
   const openDetail = async (type, row) => {
     setDetailLoading(true)
+    setActionError('')
     try {
       const sourceOrder = String(row.order ?? row.id ?? '').trim()
       const safeOrder = sourceOrder.replace('#', '')
@@ -164,7 +165,8 @@ export function ActivityScreen({
       }
       const detail = await fetchOrderDetail(safeOrder)
       setSelectedRowDetail({ type, row: detail })
-    } catch {
+    } catch (error) {
+      setActionError(error.message || 'Failed to load order detail.')
       setSelectedRowDetail({ type, row })
     } finally {
       setDetailLoading(false)
@@ -187,24 +189,24 @@ export function ActivityScreen({
           <div className="space-y-2">
             <button
               onClick={() => setTab('billing')}
-              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm ${
-                tab === 'billing' ? 'bg-[#2D71F8] text-white' : 'bg-white text-slate-700 hover:bg-slate-100'
+              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm font-bold transition-all ${
+                tab === 'billing' ? 'bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10' : 'bg-white text-stone-700 hover:bg-stone-50'
               }`}
             >
               Billing Queue
             </button>
             <button
               onClick={() => setTab('tables')}
-              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm ${
-                tab === 'tables' ? 'bg-[#2D71F8] text-white' : 'bg-white text-slate-700 hover:bg-slate-100'
+              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm font-bold transition-all ${
+                tab === 'tables' ? 'bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10' : 'bg-white text-stone-700 hover:bg-stone-50'
               }`}
             >
               Tables
             </button>
             <button
               onClick={() => setTab('history')}
-              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm ${
-                tab === 'history' ? 'bg-[#2D71F8] text-white' : 'bg-white text-slate-700 hover:bg-slate-100'
+              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm font-bold transition-all ${
+                tab === 'history' ? 'bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10' : 'bg-white text-stone-700 hover:bg-stone-50'
               }`}
             >
               Order History
@@ -213,14 +215,14 @@ export function ActivityScreen({
         </aside>
 
         <section className="flex flex-col overflow-hidden">
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 md:px-6">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-4 md:px-6">
             <div className="flex items-center gap-2">
-              <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-slate-500">
+              <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-stone-500">
                 <Menu size={18} />
               </button>
-              <h1 className="text-xl font-semibold text-slate-900">
+              <h1 className="text-xl font-bold text-stone-900">
                 Activity
-                <span className="ml-1 text-sm font-medium text-slate-400">
+                <span className="ml-1 text-sm font-medium text-stone-400">
                   /{' '}
                   {tab === 'billing'
                     ? 'Billing Queue'
@@ -230,9 +232,9 @@ export function ActivityScreen({
                 </span>
               </h1>
             </div>
-            <div className="flex items-center gap-2 text-slate-600">
+            <div className="flex items-center gap-2 text-stone-600">
               <HeaderChip icon={CalendarDays} label={formatDate(now)} />
-              <div className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-[#1C8370]">
+              <div className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-[#1C8370]">
                 Open Order
               </div>
               <button
@@ -257,7 +259,7 @@ export function ActivityScreen({
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <button
                     onClick={handleAddTable}
-                    className="ui-btn ui-btn-secondary px-4 py-2 text-sm text-slate-700"
+                    className="ui-btn ui-btn-secondary px-4 py-2 text-sm font-bold text-stone-700 hover:bg-stone-50"
                   >
                     Add Table
                   </button>
@@ -266,10 +268,10 @@ export function ActivityScreen({
                       <button
                         key={item}
                         onClick={() => setFloor(item)}
-                        className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                        className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${
                           floor === item
-                            ? 'border border-[#2D71F8]/60 bg-[#2D71F8]/5 text-[#2D71F8]'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            ? 'border border-[#7c4a32]/60 bg-[#7c4a32]/5 text-[#7c4a32]'
+                            : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
                         }`}
                       >
                         {item}
@@ -278,55 +280,76 @@ export function ActivityScreen({
                   </div>
                 </div>
 
-                <div className="space-y-5">
+                <div className="space-y-8">
                   {visibleTableGroups.map((group) => (
                     <section key={group.title}>
-                      <h3 className="mb-3 text-sm font-semibold text-slate-500">{group.title}</h3>
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                        {group.tables.map((table) => (
-                          <article
-                            key={table.id}
-                            onClick={() => handleCycleTableStatus(group.title, table.id)}
-                            className={`rounded-2xl border p-3 text-center ${
-                              table.status === 'served'
-                                ? 'border-[#2D71F8]/20 bg-[#2D71F8]/[0.03]'
-                                : table.status === 'reserved'
-                                  ? 'border-[#FC4A4A]/20 bg-[#FC4A4A]/[0.03]'
-                                  : 'border-slate-100 bg-slate-50/70'
-                            } cursor-pointer transition hover:-translate-y-0.5`}
-                          >
-                            <span
-                              className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${
-                                table.status === 'served'
-                                  ? 'bg-[#2D71F8] text-white'
-                                  : table.status === 'reserved'
-                                    ? 'bg-[#FC4A4A] text-white'
-                                    : 'bg-slate-100 text-slate-500'
+                      <div className="mb-4 flex items-center justify-between border-b border-stone-100 pb-2">
+                        <h3 className="text-sm font-bold uppercase tracking-widest text-stone-500">{group.title}</h3>
+                        <span className="rounded-full bg-stone-100 px-3 py-1 text-[10px] font-bold text-stone-600">
+                          {group.tables.length} Tables
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+                        {group.tables.map((table) => {
+                          const isServed = table.status === 'served'
+                          const isReserved = table.status === 'reserved'
+                          return (
+                            <article
+                              key={table.id}
+                              onClick={() => handleCycleTableStatus(group.title, table.id)}
+                              className={`group relative flex flex-col items-center rounded-[2rem] border-2 p-6 text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-xl cursor-pointer ${
+                                isServed
+                                  ? 'border-emerald-100 bg-white hover:border-emerald-400'
+                                  : isReserved
+                                    ? 'border-rose-100 bg-rose-50/30 hover:border-rose-400'
+                                    : 'border-stone-100 bg-white hover:border-stone-200 hover:shadow-lg hover:shadow-stone-100'
                               }`}
                             >
-                              {table.id}
-                            </span>
-                            <p className={`mt-2 text-xs ${table.status === 'reserved' ? 'text-[#FC4A4A]' : 'text-slate-500'}`}>
-                              {table.guest}
-                              {table.pax > 0 ? `: ${table.pax} Guests` : ''}
-                            </p>
-                            <p className="mt-2 text-xs text-slate-400">{table.time}</p>
-                          </article>
-                        ))}
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">
+                                  {table.id}
+                                </span>
+                                <h4 className="text-base font-black text-stone-800 leading-tight">
+                                  {table.guest || '0 Guest'}
+                                  {table.pax > 0 ? ` (${table.pax})` : ''}
+                                </h4>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                                  {table.time || '--:--'}
+                                </p>
+                              </div>
+
+                              <div className="mt-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-stone-100 group-hover:ring-stone-200 transition-all">
+                                <span
+                                  className={`h-3 w-3 rounded-full ring-4 ring-white shadow-sm ${
+                                    isServed
+                                      ? 'bg-emerald-500'
+                                      : isReserved
+                                        ? 'bg-rose-500 animate-pulse'
+                                        : 'bg-stone-300 group-hover:bg-stone-800'
+                                  }`}
+                                />
+                              </div>
+
+                              <div className="mt-4 inline-flex rounded-full bg-stone-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-stone-500 shadow-sm ring-1 ring-stone-100 group-hover:bg-stone-800 group-hover:text-white transition-all">
+                                {table.status}
+                              </div>
+                            </article>
+                          )
+                        })}
                       </div>
                     </section>
                   ))}
                   {visibleTableGroups.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
-                      No tables configured on {floor}.
+                    <div className="rounded-[2rem] border-2 border-dashed border-stone-100 p-12 text-center text-sm font-bold uppercase tracking-widest text-stone-300">
+                      No tables on {floor}
                     </div>
                   )}
                 </div>
                 <div className="mt-6 flex items-center gap-4 text-xs">
                   <p className="font-semibold text-slate-600">Table Status:</p>
-                  <StatusDot color="bg-slate-300" label="Available" />
-                  <StatusDot color="bg-[#2D71F8]" label="Served" />
-                  <StatusDot color="bg-[#FC4A4A]" label="Reserved" />
+                  <StatusDot color="bg-emerald-400" label="Served" />
+                  <StatusDot color="bg-red-400" label="Reserved" />
+                  <StatusDot color="bg-slate-200" label="Available" />
                 </div>
               </>
             )}
@@ -339,10 +362,10 @@ export function ActivityScreen({
                       <button
                         key={item}
                         onClick={() => setBillingFilter(item)}
-                        className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                        className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${
                           billingFilter === item
-                            ? 'border border-[#2D71F8]/60 bg-[#2D71F8]/5 text-[#2D71F8]'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            ? 'border border-[#7c4a32]/60 bg-[#7c4a32]/5 text-[#7c4a32]'
+                            : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
                         }`}
                       >
                         {item}
@@ -351,39 +374,39 @@ export function ActivityScreen({
                   </div>
                   <button
                     onClick={() => setBillingFilter('Active')}
-                    className="ui-btn ui-btn-secondary inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-slate-500"
+                    className="ui-btn ui-btn-secondary inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-bold text-stone-500 hover:bg-stone-50"
                   >
                     {billingQueue.filter((item) => item.status === 'active').length} Active Queue
                   </button>
                 </div>
 
-                <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100">
+                <div className="divide-y divide-stone-100 rounded-2xl border border-stone-100 bg-white">
                   {filteredBillingQueue.map((row) => (
-                    <article key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <article key={row.id} className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-stone-50/50">
                       <div>
-                        <p className="font-semibold text-slate-900">{row.customer}</p>
-                        <p className="text-sm text-slate-500">Order Number: {row.order}</p>
-                        <p className="text-sm text-slate-400">
+                        <p className="font-bold text-stone-900">{row.customer}</p>
+                        <p className="text-sm font-medium text-stone-500">Order Number: {row.order}</p>
+                        <p className="text-sm font-medium text-stone-400">
                           {row.table} - {formatDate(now)} - {row.time}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-slate-900">
+                        <p className="text-2xl font-black text-stone-900">
                           {formatCurrency(row.amount, row.currency ?? 'USD')}
                         </p>
                         <span
-                          className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                             row.status === 'active'
-                              ? 'bg-[#2D71F8]/10 text-[#2D71F8]'
-                              : 'bg-red-50 text-[#FC4A4A]'
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-stone-100 text-stone-500'
                           }`}
                         >
-                          {row.status === 'active' ? 'Active' : 'Closed'}
+                          {row.status}
                         </span>
                         <div className="mt-2 flex justify-end gap-2">
                           <button
                             onClick={() => openDetail('billing', row)}
-                            className="ui-btn ui-btn-secondary px-2.5 py-1 text-xs text-slate-600"
+                            className="ui-btn ui-btn-secondary px-2.5 py-1 text-xs font-bold text-stone-600 hover:bg-stone-100"
                           >
                             Detail
                           </button>
@@ -391,7 +414,7 @@ export function ActivityScreen({
                             <button
                               onClick={() => handleMarkOrder(row, 'Closed', 'Paid')}
                               disabled={updatingOrderNumber === row.order}
-                              className="ui-btn ui-btn-primary px-2.5 py-1 text-xs disabled:bg-slate-300 disabled:shadow-none"
+                              className="ui-btn ui-btn-primary px-2.5 py-1 text-xs font-bold disabled:bg-stone-300 disabled:shadow-none"
                             >
                               {updatingOrderNumber === row.order ? 'Saving...' : 'Close + Paid'}
                             </button>
@@ -400,7 +423,7 @@ export function ActivityScreen({
                             <button
                               onClick={() => handleMarkOrder(row, 'Done', 'Paid')}
                               disabled={updatingOrderNumber === row.order}
-                              className="ui-btn rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-xs text-white transition hover:bg-emerald-700 disabled:bg-slate-300"
+                              className="ui-btn rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:bg-stone-300"
                             >
                               {updatingOrderNumber === row.order ? 'Saving...' : 'Mark Done'}
                             </button>
@@ -411,20 +434,20 @@ export function ActivityScreen({
                   ))}
                 </div>
                 {actionError && (
-                  <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-[#FC4A4A]">
+                  <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold text-red-500">
                     {actionError}
                   </p>
                 )}
 
                 <div className="mt-5">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-800">Track Order</h3>
+                    <h3 className="font-bold text-stone-800">Track Order</h3>
                     <button
                       onClick={() => {
                         setTrackingSearchOpen((open) => !open)
                         if (trackingSearchOpen) setTrackingSearch('')
                       }}
-                      className="ui-btn ui-btn-ghost ui-icon-btn text-slate-500"
+                      className="ui-btn ui-btn-ghost ui-icon-btn text-stone-500 hover:bg-stone-100"
                     >
                       <Search size={16} />
                     </button>
@@ -434,36 +457,62 @@ export function ActivityScreen({
                       value={trackingSearch}
                       onChange={(event) => setTrackingSearch(event.target.value)}
                       placeholder="Search tracking by customer, table, or status..."
-                      className="ui-input mb-2 px-3 py-2 text-sm text-slate-700"
+                      className="ui-input mb-2 px-3 py-2 text-sm text-stone-700"
                     />
                   )}
-                  <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-1">
+                  <div className="scrollbar-hide flex gap-4 overflow-x-auto pb-4">
                     {filteredTrackingOrders.map((order) => (
                       <article
                         key={order.id}
-                        className="min-w-[220px] rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-xs"
+                        className="group min-w-[300px] flex flex-col gap-4 overflow-hidden rounded-[2.5rem] border-2 border-stone-100 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-stone-200 hover:shadow-xl hover:shadow-stone-100"
                       >
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="font-semibold text-slate-800">{order.name}</p>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              order.status === 'All Done'
-                                ? 'bg-emerald-50 text-[#1C8370]'
-                                : 'bg-slate-100 text-slate-500'
-                            }`}
-                          >
-                            {order.status}
-                          </span>
+                        <div className="flex items-start justify-between">
+                          <div className="min-w-0">
+                            <h4 className="truncate text-base font-black text-stone-800 uppercase tracking-tight group-hover:text-[var(--ui-primary)] transition-colors">
+                              {order.name}
+                            </h4>
+                            <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-stone-400">
+                              {order.table} • {order.type}
+                            </p>
+                          </div>
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-50 text-stone-800 shadow-sm ring-1 ring-stone-100 group-hover:bg-stone-800 group-hover:text-white transition-all">
+                            <span className="text-xs font-black uppercase tracking-widest">{order.id.replace(/\D/g, '') || '01'}</span>
+                          </div>
                         </div>
-                        <p className="text-slate-400">
-                          {order.table} - {order.type}
-                        </p>
-                        <p className="mt-1 font-medium text-slate-500">{order.time}</p>
+
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-widest">
+                             <span className="text-stone-400">Progress</span>
+                             <span className={`rounded-full px-3 py-1 ring-1 ring-inset ${
+                               order.status === 'All Done' || order.status === 'Ready'
+                                ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' 
+                                : 'bg-amber-50 text-amber-700 ring-amber-100'
+                             }`}>
+                               {order.status}
+                             </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100">
+                            <div 
+                              className={`h-full transition-all duration-1000 ${
+                                (order.status === 'All Done' || order.status === 'Ready') ? 'w-full bg-emerald-500' : 'w-2/3 bg-amber-500 animate-pulse'
+                              }`} 
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-stone-50">
+                          <p className="text-sm font-black text-stone-800 leading-none">
+                            {order.time}
+                          </p>
+                          <button className="flex h-8 w-8 items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-stone-800 hover:text-white transition-all">
+                             <ArrowUpRight size={14} />
+                          </button>
+                        </div>
                       </article>
                     ))}
                     {filteredTrackingOrders.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-400">
-                        No tracked orders match this filter.
+                      <div className="flex w-full items-center justify-center rounded-[2rem] border-2 border-dashed border-stone-100 py-12 text-sm font-bold uppercase tracking-widest text-stone-300">
+                        No tracked orders found
                       </div>
                     )}
                   </div>
@@ -472,8 +521,8 @@ export function ActivityScreen({
             )}
 
             {tab === 'history' && (
-              <div className="overflow-hidden rounded-2xl border border-slate-100">
-                <div className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 border-b border-slate-100 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
+                <div className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 border-b border-stone-100 bg-stone-50 px-3 py-4 text-[10px] font-bold uppercase tracking-widest text-stone-500">
                   <p>#</p>
                   <p>Date & Time</p>
                   <p>Customer Name</p>
@@ -482,23 +531,23 @@ export function ActivityScreen({
                   <p>Payment Status</p>
                   <p>Orders</p>
                 </div>
-                <div className="max-h-[560px] overflow-y-auto">
+                <div className="max-h-[560px] overflow-y-auto divide-y divide-stone-50">
                   {filteredHistoryRows.map((row) => (
                     <div
                       key={row.id + row.at}
-                      className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 border-b border-slate-100 px-3 py-3 text-sm text-slate-700"
+                      className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 px-3 py-4 text-sm text-stone-700 transition-colors hover:bg-stone-50/50"
                     >
-                      <p>{row.id}</p>
-                      <p>{row.at}</p>
-                      <p>{row.customer}</p>
-                      <p>{row.status}</p>
-                      <p>{formatCurrency(row.payment, row.currency ?? 'USD')}</p>
-                      <p className={row.paid ? 'text-[#1C8370]' : 'text-[#FC4A4A]'}>
+                      <p className="font-bold">{row.id}</p>
+                      <p className="font-medium">{row.at}</p>
+                      <p className="font-bold">{row.customer}</p>
+                      <p className="font-bold uppercase tracking-wider text-[11px] text-stone-500">{row.status}</p>
+                      <p className="font-black text-stone-900">{formatCurrency(row.payment, row.currency ?? 'USD')}</p>
+                      <p className={`font-bold uppercase tracking-widest text-[11px] ${row.paid ? 'text-[#1C8370]' : 'text-red-500'}`}>
                         {row.paid ? 'Paid' : 'Unpaid'}
                       </p>
                       <button
                         onClick={() => openDetail('history', row)}
-                        className="text-[#2D71F8] hover:underline"
+                        className="text-[#7c4a32] font-bold hover:underline"
                       >
                         Detail
                       </button>
@@ -512,92 +561,122 @@ export function ActivityScreen({
       </div>
 
       {selectedRowDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-900">Order Detail</h3>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              <p>
-                <span className="font-semibold text-slate-800">Type:</span> {selectedRowDetail.type}
-              </p>
-              <p>
-                <span className="font-semibold text-slate-800">Order:</span>{' '}
-                {selectedRowDetail.row.order ?? `#${selectedRowDetail.row.id}`}
-              </p>
-              <p>
-                <span className="font-semibold text-slate-800">Customer:</span>{' '}
-                {selectedRowDetail.row.customer ?? selectedRowDetail.row.name ?? 'N/A'}
-              </p>
-              <p>
-                <span className="font-semibold text-slate-800">Status:</span>{' '}
-                {selectedRowDetail.row.status ?? selectedRowDetail.row.state ?? 'N/A'}
-              </p>
-              {'table' in selectedRowDetail.row && (
-                <p>
-                  <span className="font-semibold text-slate-800">Table:</span>{' '}
-                  {selectedRowDetail.row.table}
-                </p>
-              )}
-              {'payment' in selectedRowDetail.row && (
-                <p>
-                  <span className="font-semibold text-slate-800">Payment:</span>{' '}
-                  {formatCurrency(
-                    selectedRowDetail.row.payment,
-                    selectedRowDetail.row.currency ?? 'USD',
-                  )}
-                </p>
-              )}
-              {'paymentMethod' in selectedRowDetail.row && (
-                <p>
-                  <span className="font-semibold text-slate-800">Payment Method:</span>{' '}
-                  {selectedRowDetail.row.paymentMethod}
-                </p>
-              )}
-              {'amountReceived' in selectedRowDetail.row && (
-                <p>
-                  <span className="font-semibold text-slate-800">Received:</span>{' '}
-                  {formatCurrency(
-                    selectedRowDetail.row.amountReceived,
-                    selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
-                  )}
-                </p>
-              )}
-              {'changeAmount' in selectedRowDetail.row && (
-                <p>
-                  <span className="font-semibold text-slate-800">Change:</span>{' '}
-                  {formatCurrency(
-                    selectedRowDetail.row.changeAmount,
-                    selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
-                  )}
-                </p>
-              )}
-              {detailLoading && (
-                <p className="text-xs text-slate-400">Loading full order detail...</p>
-              )}
-              {Array.isArray(selectedRowDetail.row?.items) && selectedRowDetail.row.items.length > 0 && (
-                <div className="mt-2 space-y-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
-                  {selectedRowDetail.row.items.map((item, index) => (
-                    <div key={`${item.productId}-${index}`} className="flex justify-between gap-2 text-sm">
-                      <span>
-                        {item.productName} x{item.quantity}
-                      </span>
-                      <span>
-                        {formatCurrency(
-                          item.totalPrice,
-                          selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
-                        )}
-                      </span>
-                    </div>
-                  ))}
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md overflow-hidden rounded-[2.5rem] border-2 border-stone-100 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            <header className="flex items-center justify-between border-b border-stone-100 px-8 py-6">
+              <h3 className="text-xl font-black text-stone-800 uppercase tracking-tight">Order Detail</h3>
+              <button 
+                onClick={() => setSelectedRowDetail(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-50 text-stone-400 hover:bg-stone-800 hover:text-white transition-all"
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <div className="max-h-[70vh] overflow-y-auto px-8 py-6">
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Order ID</p>
+                    <p className="text-sm font-bold text-stone-800">{selectedRowDetail.row.order ?? `#${selectedRowDetail.row.id}`}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Type</p>
+                    <p className="text-sm font-bold text-stone-800 uppercase tracking-tight">{selectedRowDetail.type}</p>
+                  </div>
+                  <div className="space-y-1 text-left">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Customer</p>
+                    <p className="text-sm font-bold text-stone-800 truncate">{selectedRowDetail.row.customer ?? selectedRowDetail.row.name ?? 'Guest'}</p>
+                  </div>
+                   <div className="space-y-1 text-left">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Status</p>
+                    <span className="inline-flex rounded-full bg-stone-100 px-3 py-0.5 text-[10px] font-black uppercase tracking-widest text-stone-600 ring-1 ring-stone-200">
+                      {selectedRowDetail.row.status ?? selectedRowDetail.row.state ?? 'N/A'}
+                    </span>
+                  </div>
                 </div>
-              )}
+
+                <div className="rounded-[1.5rem] bg-stone-50 p-5 ring-1 ring-stone-100">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-stone-400">Financial Summary</p>
+                  <div className="space-y-2">
+                    {'payment' in selectedRowDetail.row && (
+                      <div className="flex justify-between text-sm">
+                        <span className="font-bold text-stone-500">Total Payable</span>
+                        <span className="font-black text-stone-800">
+                          {formatCurrency(selectedRowDetail.row.payment, selectedRowDetail.row.currency ?? 'USD')}
+                        </span>
+                      </div>
+                    )}
+                    {'paymentMethod' in selectedRowDetail.row && (
+                      <div className="flex justify-between text-sm">
+                        <span className="font-bold text-stone-500">Method</span>
+                        <span className="font-black text-stone-800">{selectedRowDetail.row.paymentMethod}</span>
+                      </div>
+                    )}
+                    {'amountReceived' in selectedRowDetail.row && (
+                      <div className="flex justify-between text-sm">
+                        <span className="font-bold text-stone-500">Received</span>
+                        <span className="font-black text-emerald-600">
+                          {formatCurrency(
+                            selectedRowDetail.row.amountReceived,
+                            selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {'changeAmount' in selectedRowDetail.row && (
+                      <div className="flex justify-between text-sm">
+                        <span className="font-bold text-stone-500">Change</span>
+                        <span className="font-black text-amber-600">
+                          {formatCurrency(
+                            selectedRowDetail.row.changeAmount,
+                            selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {Array.isArray(selectedRowDetail.row?.items) && selectedRowDetail.row.items.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-stone-400">Order Items</p>
+                    <div className="space-y-2">
+                      {selectedRowDetail.row.items.map((item, index) => (
+                        <div key={`${item.productId}-${index}`} className="flex items-center justify-between rounded-2xl bg-white p-3 ring-1 ring-stone-100">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-stone-800">{item.productName}</p>
+                            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Qty: {item.quantity}</p>
+                          </div>
+                          <span className="text-sm font-black text-stone-800">
+                            {formatCurrency(
+                              item.totalPrice,
+                              selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {detailLoading && (
+                  <div className="flex items-center justify-center py-4 gap-2 text-stone-400">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Loading Details...</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <button
-              onClick={() => setSelectedRowDetail(null)}
-              className="ui-btn ui-btn-primary mt-4 w-full py-2.5 text-sm"
-            >
-              Close
-            </button>
+
+            <footer className="bg-stone-50 px-8 py-6">
+               <button
+                onClick={() => setSelectedRowDetail(null)}
+                className="flex w-full h-12 items-center justify-center rounded-2xl bg-[var(--ui-primary)] text-white text-sm font-black uppercase tracking-widest shadow-lg shadow-stone-200 hover:bg-stone-800 transition-all active:scale-95"
+              >
+                Done
+              </button>
+            </footer>
           </div>
         </div>
       )}

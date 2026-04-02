@@ -18,7 +18,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, startTransition
 import { PaymentModal } from '../components/PaymentModal'
 import { ProductModal } from '../components/ProductModal'
 import { HeaderChip, RailButton } from '../components/common'
-import { CATEGORY_ITEMS, PAGE_ITEMS, PRODUCT_ITEMS, TRACKING_ORDERS } from '../uiData'
+import { CATEGORY_ITEMS, PAGE_ITEMS, PRODUCT_ITEMS, TRACKING_ORDERS } from '../constants/uiData'
 import { formatCurrency, formatDate, formatTime } from '../utils/format'
 
 const DEFAULT_CURRENCY = 'USD'
@@ -373,10 +373,10 @@ export function PosScreen({
   }
 
   return (
-    <div className="grid h-screen w-full grid-cols-1 gap-3 overflow-hidden p-3 md:p-4 xl:grid-cols-[74px_1fr_380px]">
-      <aside className="ui-surface hidden rounded-[22px] p-3 xl:flex xl:flex-col xl:items-center xl:justify-between">
+    <div className="grid h-screen w-full grid-cols-1 gap-3 overflow-hidden bg-white p-3 md:p-4 xl:grid-cols-[74px_1fr_380px]">
+      <aside className="ui-surface hidden rounded-[24px] p-3 xl:flex xl:flex-col xl:items-center xl:justify-between">
         <div className="flex w-full flex-col items-center gap-5">
-          <button onClick={onOpenMenu} className="ui-btn ui-btn-primary mt-1 h-11 w-11 rounded-full p-0">
+          <button onClick={onOpenMenu} className="ui-btn ui-btn-primary mt-1 h-11 w-11 rounded-full p-0 shadow-lg shadow-amber-900/10">
             <Menu size={20} />
           </button>
           {pageItems.map((item) => (
@@ -393,10 +393,10 @@ export function PosScreen({
         </button>
       </aside>
 
-      <main className="ui-surface flex min-h-0 flex-col overflow-hidden rounded-[22px]">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 md:px-6">
-          <div className="flex items-center gap-2 text-slate-600">
-            <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-slate-500 xl:hidden">
+      <main className="ui-surface flex min-h-0 flex-col overflow-hidden rounded-[24px]">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-4 md:px-6">
+          <div className="flex items-center gap-2 text-stone-600">
+            <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-stone-500 xl:hidden">
               <Menu size={19} />
             </button>
             <HeaderChip icon={CalendarDays} label={formatDate(now)} />
@@ -404,7 +404,7 @@ export function PosScreen({
           </div>
           <div className="flex items-center gap-2">
             <div
-              className={`ui-pill ${
+              className={`ui-pill px-3 py-1 font-bold ${
                 cart.length > 0 ? 'bg-emerald-50 text-[#1C8370]' : 'bg-red-50 text-[#FC4A4A]'
               }`}
             >
@@ -414,39 +414,39 @@ export function PosScreen({
               <div ref={stockAlertPanelRef} className="relative">
                 <button
                   onClick={handleBellToggle}
-                  className="ui-btn ui-btn-ghost ui-icon-btn relative text-[#2D71F8] hover:bg-[#2D71F8]/10"
+                  className="ui-btn ui-btn-ghost ui-icon-btn relative text-stone-500 hover:bg-stone-100"
                   title="Open stock alerts"
                 >
                   <Bell size={17} />
                   {stockAlertCount > 0 && (
-                    <span className="absolute -right-1 -top-1 inline-flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#FC4A4A] px-1 text-[10px] font-bold leading-none text-white">
+                    <span className="absolute -right-1 -top-1 inline-flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#7c4a32] px-1 text-[10px] font-bold leading-none text-white">
                       {stockAlertCount > 99 ? '99+' : stockAlertCount}
                     </span>
                   )}
                 </button>
                 {stockAlertOpen && (
-                  <div className="ui-surface absolute right-0 top-[calc(100%+8px)] z-20 w-[290px] rounded-xl border-slate-200 bg-white p-3">
+                  <div className="ui-surface absolute right-0 top-[calc(100%+8px)] z-20 w-[290px] rounded-xl border-stone-200 bg-white p-3 shadow-xl">
                     <div className="mb-2 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-900">Stock Alerts</p>
-                      <span className="text-xs text-slate-400">{stockAlertCount} items</span>
+                      <p className="text-sm font-semibold text-stone-900">Stock Alerts</p>
+                      <span className="text-xs text-stone-400">{stockAlertCount} items</span>
                     </div>
                     {hasAnyStockAlert > 0 ? (
-                      <div className="space-y-2">
+                      <div className="max-h-[300px] space-y-2 overflow-y-auto">
                         {stockAlertPreview.map((alert) => (
-                          <div key={`alert-popover-${alert.id}`} className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-2">
+                          <div key={`alert-popover-${alert.id}`} className="rounded-lg border border-stone-100 bg-stone-50/70 px-2.5 py-2">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-semibold text-slate-800">{alert.name}</p>
+                              <p className="truncate text-sm font-semibold text-stone-800">{alert.name}</p>
                               <span
                                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                                   alert.state === 'out'
-                                    ? 'bg-red-100 text-[#FC4A4A]'
-                                    : 'bg-[#2D71F8]/10 text-[#2D71F8]'
+                                    ? 'bg-red-100 text-red-600'
+                                    : 'bg-amber-100 text-amber-700'
                                 }`}
                               >
                                 {alert.state === 'out' ? 'Out' : 'Low'}
                               </span>
                             </div>
-                            <p className="mt-0.5 text-[11px] text-slate-500">
+                            <p className="mt-0.5 text-[11px] text-stone-500">
                               Stock {alert.stockQty}
                               {alert.state === 'low' ? ` (Threshold ${alert.stockThreshold})` : ''}
                             </p>
@@ -454,7 +454,7 @@ export function PosScreen({
                         ))}
                       </div>
                     ) : (
-                      <p className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-600">
+                      <p className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600">
                         All stock healthy.
                       </p>
                     )}
@@ -482,7 +482,7 @@ export function PosScreen({
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-3">
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-3 -mx-1 px-1">
             {mergedCategories.map((item) => {
               const Icon = item.icon
               const isActive = activeCategory === item.id
@@ -490,30 +490,37 @@ export function PosScreen({
                 <button
                   key={item.id}
                   onClick={() => setActiveCategory(item.id)}
-                  className={`w-[116px] flex-shrink-0 rounded-2xl border p-3 text-left transition-all ${
+                  className={`relative flex min-w-[120px] flex-shrink-0 flex-col items-start gap-3 rounded-2xl border p-4 transition-all duration-300 ${
                     isActive
-                      ? 'border-[#2D71F8] bg-[#2D71F8]/[0.03] shadow-[0_10px_18px_rgba(45,113,248,0.14)]'
-                      : 'border-slate-100 bg-slate-50/70 hover:bg-slate-100'
+                      ? 'border-[#7c4a32] bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10 -translate-y-1'
+                      : 'border-stone-100 bg-white text-stone-600 hover:border-stone-200 hover:bg-stone-50'
                   }`}
                 >
                   <div
-                    className={`mb-3 inline-flex rounded-full p-2 ${
-                      isActive ? 'bg-[#2D71F8] text-white' : 'bg-white text-slate-500'
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-stone-50 text-stone-500'
                     }`}
                   >
-                    <Icon size={16} />
+                    <Icon size={20} />
                   </div>
-                  <p className={`text-sm font-semibold ${isActive ? 'text-[#2D71F8]' : 'text-slate-800'}`}>
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-slate-400">{item.count} Items</p>
+                  <div>
+                    <p className={`text-sm font-bold ${isActive ? 'text-white' : 'text-stone-900'}`}>
+                      {item.name}
+                    </p>
+                    <p className={`text-[10px] font-medium uppercase tracking-wider ${isActive ? 'text-white/60' : 'text-stone-400'}`}>
+                      {item.count} Items
+                    </p>
+                  </div>
+                  {isActive && (
+                    <div className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></div>
+                  )}
                 </button>
               )
             })}
           </div>
 
           <label className="relative my-5 block">
-            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
             <input
               ref={productSearchInputRef}
               type="text"
@@ -523,73 +530,119 @@ export function PosScreen({
                 startTransition(() => setSearchQuery(nextValue))
               }}
               placeholder="Search something sweet or strong..."
-              className="ui-input rounded-2xl bg-slate-50/80 py-3 pl-11 pr-4 text-sm font-medium text-slate-700"
+              className="ui-input rounded-2xl bg-stone-50/80 py-3 pl-11 pr-4 text-sm font-medium text-stone-700"
             />
           </label>
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 2xl:grid-cols-4">
-            {filteredProducts.map((product) => (
-              <button
-                key={product.id}
-                onClick={() => {
-                  const availableQty = availableStockForProduct(product)
-                  if (availableQty <= 0) {
-                    onAction?.(`${product.name} is out of stock.`)
-                    return
-                  }
-                  if (product.customizable) {
-                    setSelectedProduct(product)
-                  } else {
-                    addToCart(product)
-                  }
-                }}
-                className={`group flex flex-col rounded-2xl border bg-white p-3 text-left transition-all ${
-                  availableStockForProduct(product) <= 0
-                    ? 'cursor-not-allowed border-slate-200 opacity-55'
-                    : 'border-slate-100 hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)]'
-                }`}
-              >
-                <div className="mb-3 aspect-square overflow-hidden rounded-2xl bg-slate-50">
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                </div>
-                <p className="line-clamp-2 text-[15px] font-bold text-slate-900">{product.name}</p>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    {product.label}
-                  </span>
-                  <span className="text-[15px] font-bold text-slate-900">{formatMoney(product.basePrice)}</span>
-                </div>
-                <p
-                  className={`mt-1 text-[11px] font-semibold ${
-                    availableStockForProduct(product) <= 0 ? 'text-[#FC4A4A]' : 'text-slate-400'
+            {filteredProducts.map((product) => {
+              const availableQty = availableStockForProduct(product)
+              const isOutOfStock = availableQty <= 0
+              return (
+                <div
+                  key={product.id}
+                  className={`group relative flex flex-col rounded-3xl border bg-white p-3 transition-all duration-300 ${
+                    isOutOfStock
+                      ? 'cursor-not-allowed border-stone-100 opacity-60'
+                      : 'border-stone-100 hover:-translate-y-1 hover:border-emerald-100 hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]'
                   }`}
                 >
-                  Stock: {Math.max(0, Math.floor(resolveStockQty(product)))}
-                </p>
-              </button>
-            ))}
+                  <div className="relative mb-3 aspect-square overflow-hidden rounded-2xl bg-stone-50">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                    <button
+                      onClick={() => {
+                        if (product.customizable) {
+                          setSelectedProduct(product)
+                        } else {
+                          addToCart(product)
+                        }
+                      }}
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-xl transition-all duration-300 hover:scale-110 active:scale-90"
+                    >
+                      {product.customizable ? <Edit2 size={24} /> : <Plus size={28} />}
+                    </button>
+                  </div>
+                    {isOutOfStock && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-stone-900/40 backdrop-blur-[2px]">
+                        <span className="rounded-full bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-900">
+                          Sold Out
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-1 flex-col px-1">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                        {product.label}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold ${
+                          isOutOfStock ? 'text-red-500' : 'text-emerald-600'
+                        }`}
+                      >
+                        {isOutOfStock ? 'No Stock' : `${availableQty} Left`}
+                      </span>
+                    </div>
+
+                    <h3 className="line-clamp-2 min-h-[40px] text-[15px] font-bold text-stone-800 group-hover:text-emerald-700 transition-colors leading-snug" title={product.name}>
+                      {product.name}
+                    </h3>
+
+                    <div className="mt-3 flex items-center justify-between border-t border-stone-50 pt-3">
+                      <span className="text-lg font-black text-stone-900">
+                        {formatMoney(product.basePrice)}
+                      </span>
+                      {!isOutOfStock && !product.customizable && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            addToCart(product)
+                          }}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#7c4a32] text-white shadow-sm transition-all hover:bg-[#5d3624] hover:shadow-amber-900/20 active:scale-90"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      )}
+                      {!isOutOfStock && product.customizable && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedProduct(product)
+                          }}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-stone-100 text-stone-600 transition-all hover:bg-emerald-50 hover:text-emerald-600 active:scale-90"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
-        <footer className="border-t border-slate-100 px-4 py-3 md:px-6">
+        <footer className="border-t border-stone-100 px-4 py-3 md:px-6">
           <div className="mb-2 flex items-center justify-between">
             <button
               onClick={() => setTrackVisible((current) => !current)}
-              className="ui-btn ui-btn-primary rounded-full px-3 py-1 text-sm"
+              className="ui-btn ui-btn-primary rounded-full px-3 py-1 text-sm shadow-sm"
             >
               Track Order
             </button>
-            <div className="flex items-center gap-2 text-slate-400">
+            <div className="flex items-center gap-2 text-stone-400">
               <button
                 onClick={() => {
                   setTrackingSearchOpen((open) => !open)
                   if (trackingSearchOpen) setTrackingKeyword('')
                 }}
-                className="ui-btn ui-btn-ghost ui-icon-btn h-7 w-7 p-1"
+                className="ui-btn ui-btn-ghost ui-icon-btn h-7 w-7 p-1 hover:bg-stone-100"
               >
                 <Search size={16} />
               </button>
@@ -597,7 +650,7 @@ export function PosScreen({
                 onClick={() =>
                   setTrackingSort((current) => (current === 'latest' ? 'oldest' : 'latest'))
                 }
-                className="ui-btn ui-btn-ghost ui-icon-btn h-7 w-7 p-1"
+                className="ui-btn ui-btn-ghost ui-icon-btn h-7 w-7 p-1 hover:bg-stone-100"
               >
                 <Clock3 size={16} />
               </button>
@@ -608,7 +661,7 @@ export function PosScreen({
               value={trackingKeyword}
               onChange={(event) => setTrackingKeyword(event.target.value)}
               placeholder="Search tracking by customer, table, or status..."
-              className="ui-input mb-2 px-3 py-2 text-sm text-slate-700"
+              className="ui-input mb-2 px-3 py-2 text-sm text-stone-700"
             />
           )}
           {trackVisible && (
@@ -616,28 +669,28 @@ export function PosScreen({
               {filteredTrackingOrders.map((order) => (
                 <article
                   key={order.id}
-                  className="min-w-[220px] rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-xs"
+                  className="min-w-[220px] rounded-2xl border border-stone-100 bg-stone-50/70 p-3 text-xs"
                 >
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="font-semibold text-slate-800">{order.name}</p>
+                    <p className="font-bold text-stone-800">{order.name}</p>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                         order.status === 'All Done'
                           ? 'bg-emerald-50 text-[#1C8370]'
-                          : 'bg-slate-100 text-slate-500'
+                          : 'bg-stone-100 text-stone-500'
                       }`}
                     >
                       {order.status}
                     </span>
                   </div>
-                  <p className="text-slate-400">
+                  <p className="text-stone-400">
                     {order.table} - {order.type}
                   </p>
-                  <p className="mt-1 font-medium text-slate-500">{order.time}</p>
+                  <p className="mt-1 font-medium text-stone-500">{order.time}</p>
                 </article>
               ))}
               {filteredTrackingOrders.length === 0 && (
-                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-xs text-slate-400">
+                <div className="rounded-xl border border-dashed border-stone-200 px-4 py-3 text-xs text-stone-400">
                   No tracked orders match this filter.
                 </div>
               )}
@@ -646,136 +699,187 @@ export function PosScreen({
         </footer>
       </main>
 
-      <aside className="ui-surface flex min-h-0 flex-col overflow-hidden rounded-[22px]">
-        <div className="border-b border-slate-100 p-5">
+      <aside className="ui-surface flex min-h-0 flex-col overflow-hidden rounded-[24px]">
+        <div className="border-b border-stone-100 p-5 bg-stone-50/30">
           <div className="mb-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2D71F8]/10 font-bold text-[#2D71F8]">
-                <UserRound size={16} />
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10">
+                <UserRound size={20} />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-900">{customerName || 'Customer Order'}</h2>
-                <p className="text-xs text-slate-400">Order Number: Draft</p>
+                <h2 className="text-lg font-black text-stone-900 leading-tight">{customerName || 'Customer Order'}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Order in Progress</p>
+                </div>
               </div>
             </div>
-            <button onClick={() => customerInputRef.current?.focus()} className="ui-btn ui-btn-ghost ui-icon-btn text-slate-400 hover:text-slate-700">
+            <button 
+              onClick={() => customerInputRef.current?.focus()} 
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-stone-200 text-stone-400 hover:text-stone-900 transition-all hover:shadow-sm"
+            >
               <Edit2 size={16} />
             </button>
           </div>
-          <div className="mb-2">
-            <input
-              ref={customerInputRef}
-              value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
-              placeholder="Customer Name"
-              className="ui-input px-3 py-2 text-sm font-semibold text-slate-700"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={tableName}
-              onChange={(event) => setTableName(event.target.value)}
-              className="ui-input px-3 py-2 text-sm font-semibold text-slate-700"
-            >
-              {allTables.map((table) => (
-                <option key={table.id || table.label} value={table.label}>
-                  {table.label}
-                </option>
-              ))}
-            </select>
-            <select
-              value={orderType}
-              onChange={(event) => setOrderType(event.target.value)}
-              className="ui-input px-3 py-2 text-sm font-semibold text-slate-700"
-            >
-              <option>Dine In</option>
-              <option>Take Away</option>
-            </select>
+          <div className="space-y-3">
+            <div className="relative">
+              <input
+                ref={customerInputRef}
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                placeholder="Customer Name"
+                className="ui-input h-11 px-4 py-2 text-sm font-bold text-stone-800 placeholder:text-stone-300 border-stone-200 focus:border-[#7c4a32] focus:ring-4 focus:ring-amber-900/5"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="relative">
+                <select
+                  value={tableName}
+                  onChange={(event) => setTableName(event.target.value)}
+                  className="ui-input h-11 appearance-none px-4 py-2 text-sm font-bold text-stone-800 border-stone-200 focus:border-[#7c4a32] focus:ring-4 focus:ring-amber-900/5"
+                >
+                  {allTables.map((table) => (
+                    <option key={table.id || table.label} value={table.label}>
+                      {table.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Menu size={14} />
+                </div>
+              </div>
+              <div className="relative">
+                <select
+                  value={orderType}
+                  onChange={(event) => setOrderType(event.target.value)}
+                  className="ui-input h-11 appearance-none px-4 py-2 text-sm font-bold text-stone-800 border-stone-200 focus:border-[#7c4a32] focus:ring-4 focus:ring-amber-900/5"
+                >
+                  <option>Dine In</option>
+                  <option>Take Away</option>
+                </select>
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Menu size={14} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {cart.length === 0 && (
-            <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 text-center">
-              <Coffee size={36} className="mb-2 text-slate-200" />
-              <p className="text-sm font-medium text-slate-400">No item selected yet.</p>
+            <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-200 text-center">
+              <Coffee size={36} className="mb-2 text-stone-200" />
+              <p className="text-sm font-medium text-stone-400">No item selected yet.</p>
             </div>
           )}
           {cart.map((item) => (
-            <article key={item.cartId} className="group flex gap-3">
-              <img
-                src={item.product.image}
-                alt={item.product.name}
-                className="h-14 w-14 rounded-xl border border-slate-100 object-cover"
-              />
+            <article
+              key={item.cartId}
+              className="group flex gap-4 rounded-2xl bg-stone-50/50 p-2.5 transition-all hover:bg-white hover:shadow-md border border-transparent hover:border-stone-100"
+            >
+              <div className="relative h-16 w-16 overflow-hidden rounded-xl border border-stone-100 bg-white">
+                <img
+                  src={item.product.image}
+                  alt={item.product.name}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+              </div>
               <div className="flex-1">
                 <div className="mb-1 flex items-start justify-between gap-3">
-                  <p className="font-semibold text-slate-900">{item.product.name}</p>
-                  <p className="font-bold text-slate-900">{formatMoney(item.totalPrice)}</p>
+                  <div>
+                    <p className="font-bold text-stone-800 leading-tight">{item.product.name}</p>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+                      {item.product.label}
+                    </span>
+                  </div>
+                  <p className="font-black text-stone-900">{formatMoney(item.totalPrice)}</p>
                 </div>
                 {Object.values(item.selectedOptions).length > 0 && (
-                  <div className="mb-2 space-y-0.5 text-[12px] text-slate-400">
+                  <div className="mb-2 space-y-0.5 text-[11px] font-medium text-stone-400">
                     {Object.values(item.selectedOptions).map((option) => (
-                      <p key={`${item.cartId}-${option.name}`}>
+                      <p key={`${item.cartId}-${option.name}`} className="flex items-center gap-1">
+                        <span className="h-1 w-1 rounded-full bg-stone-200"></span>
                         {option.name}
-                        {option.price > 0 ? ` (+${formatMoney(option.price)})` : ''}
+                        {option.price > 0 ? (
+                          <span className="text-stone-300">(+{formatMoney(option.price)})</span>
+                        ) : (
+                          ''
+                        )}
                       </p>
                     ))}
                   </div>
                 )}
-                <div className="flex items-center justify-between">
-                  <button
-                    onClick={() => updateCartNotes(item.cartId)}
-                    className="ui-btn ui-btn-secondary rounded-md border-[#2D71F8]/20 bg-[#2D71F8]/10 p-1.5 text-[#2D71F8] hover:bg-[#2D71F8]/20"
-                  >
-                    <Paperclip size={13} />
-                  </button>
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 opacity-80 transition-opacity group-hover:opacity-100">
+                <div className="mt-2 flex items-center justify-between">
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => updateCartNotes(item.cartId)}
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
+                        item.notes
+                          ? 'border-blue-100 bg-blue-50 text-[#2d71f8]'
+                          : 'border-stone-100 bg-white text-stone-400 hover:text-stone-600'
+                      }`}
+                      title={item.notes || 'Add note'}
+                    >
+                      <Paperclip size={14} />
+                    </button>
+                    <button
+                      onClick={() => updateCartQuantity(item.cartId, -item.quantity)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-100 bg-white text-stone-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                      title="Remove from cart"
+                    >
+                      <LogOut size={14} className="rotate-180" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white p-1 shadow-sm">
                     <button
                       onClick={() => updateCartQuantity(item.cartId, -1)}
-                      className="ui-btn ui-btn-ghost rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-700"
+                      className="flex h-6 w-6 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-800"
                     >
                       <Minus size={14} />
                     </button>
-                    <span className="w-4 text-center text-sm font-semibold text-slate-700">
+                    <span className="min-w-[20px] text-center text-[13px] font-bold text-stone-800">
                       {item.quantity}
                     </span>
                     <button
                       onClick={() => updateCartQuantity(item.cartId, 1)}
-                      className="ui-btn ui-btn-ghost rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-700"
+                      className="flex h-6 w-6 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-800"
                     >
                       <Plus size={14} />
                     </button>
                   </div>
                 </div>
-                {item.notes && <p className="mt-1 text-xs text-slate-500">Note: {item.notes}</p>}
+                {item.notes && (
+                  <p className="mt-2 rounded-lg bg-blue-50/50 p-2 text-[11px] italic text-[#2d71f8]">
+                    "{item.notes}"
+                  </p>
+                )}
               </div>
             </article>
           ))}
         </div>
 
-        <footer className="border-t border-slate-100 bg-white p-5">
+        <footer className="border-t border-stone-100 bg-white p-5">
           {placeError && (
-            <p className="mb-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-[#FC4A4A]">
+            <p className="mb-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-500">
               {placeError}
             </p>
           )}
           <div className="mb-5 space-y-2 text-sm tabular-nums">
             <div className="flex items-center justify-between">
-              <p className="font-medium text-slate-500">Subtotal</p>
-              <p className="font-medium text-slate-700">{formatMoney(subtotal)}</p>
+              <p className="font-medium text-stone-500">Subtotal</p>
+              <p className="font-medium text-stone-700">{formatMoney(subtotal)}</p>
             </div>
             <div className="flex items-center justify-between">
-              <p className="font-medium text-slate-500">{taxLabel}</p>
-              <p className="font-medium text-slate-700">{formatMoney(tax)}</p>
+              <p className="font-medium text-stone-500">{taxLabel}</p>
+              <p className="font-medium text-stone-700">{formatMoney(tax)}</p>
             </div>
             <div className="flex items-center justify-between">
               <p className="font-medium text-[#1C8370]">Discount</p>
               <p className="font-medium text-[#1C8370]">- {formatMoney(discount)}</p>
             </div>
-            <div className="mt-3 flex items-center justify-between border-t border-dashed border-slate-200 pt-3">
-              <p className="text-sm font-medium text-slate-500">Total</p>
-              <p className="text-2xl font-semibold text-[#2D71F8] tabular-nums">{formatMoney(total)}</p>
+            <div className="mt-3 flex items-center justify-between border-t border-dashed border-stone-200 pt-3">
+              <p className="text-sm font-medium text-stone-500">Payable Amount</p>
+              <p className="text-2xl font-black text-[#7c4a32] tabular-nums">{formatMoney(total)}</p>
             </div>
           </div>
           <div className="mb-4 space-y-2.5">
@@ -787,7 +891,7 @@ export function PosScreen({
                   return next
                 })
               }
-              className="ui-btn ui-btn-secondary mb-2 flex w-full items-center justify-center gap-2 px-3 py-2.5 text-sm text-slate-600"
+              className="ui-btn ui-btn-secondary mb-2 flex w-full items-center justify-center gap-2 px-3 py-2.5 text-sm text-stone-600 hover:bg-stone-50"
             >
               <Percent size={16} className="text-[#1C8370]" />
               {discountRate > 0 ? 'Promo 10% On' : 'Apply Promo 10%'}
@@ -796,9 +900,9 @@ export function PosScreen({
           <button
             onClick={openPaymentModal}
             disabled={placingOrder || cart.length === 0}
-            className="ui-btn ui-btn-primary w-full py-3.5 text-base font-semibold disabled:bg-slate-300 disabled:shadow-none"
+            className="ui-btn ui-btn-primary w-full py-4 text-lg font-black shadow-lg shadow-amber-900/10 disabled:bg-stone-200 disabled:shadow-none transition-all active:scale-[0.98]"
           >
-            {placingOrder ? 'Placing Order...' : 'Place Order'}
+            {placingOrder ? 'Processing...' : 'Complete Payment'}
           </button>
         </footer>
       </aside>
