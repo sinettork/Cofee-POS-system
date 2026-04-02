@@ -9,7 +9,8 @@ import {
   Power,
   Search,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { fetchReportSummary } from '../api/client'
 import { HeaderChip, MetricCard, MiniMetric } from '../components/common'
 import { FAVORITES, REPORT_ORDER_ROWS } from '../uiData'
 import { formatCurrency, formatDate } from '../utils/format'
@@ -34,6 +35,26 @@ export function ReportScreen({
   const [paymentFilter, setPaymentFilter] = useState('All')
   const [detailRow, setDetailRow] = useState(null)
   const [metricMode, setMetricMode] = useState('Total Sales Amount')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [summaryData, setSummaryData] = useState(summary)
+
+  useEffect(() => {
+    setSummaryData(summary)
+  }, [summary])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('from', dateFrom)
+    if (dateTo) params.set('to', dateTo)
+    fetchReportSummary(controller.signal, params.toString())
+      .then((result) => setSummaryData(result))
+      .catch((error) => {
+        if (error?.name === 'AbortError') return
+      })
+    return () => controller.abort()
+  }, [dateFrom, dateTo])
 
   const filteredFavorites = useMemo(() => {
     const keyword = favoriteKeyword.trim().toLowerCase()
@@ -50,15 +71,19 @@ export function ReportScreen({
     return reportOrderRows.filter((row) => row.paymentState === paymentFilter)
   }, [paymentFilter, reportOrderRows])
 
-  const miniMetricAmount = Number(summary.totalSales || 0).toLocaleString('en-US', {
+  const miniMetricAmount = Number(summaryData.totalSales || 0).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  const miniMetricGrowth = Number(summary.netProfit || 0).toLocaleString('en-US', {
+  const miniMetricGrowth = Number(summaryData.netProfit || 0).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  const miniMetricGrowthPct = summary.totalSales > 0 ? ((summary.netProfit / summary.totalSales) * 100).toFixed(1) : '0.0'
+  const miniMetricGrowthPct =
+    summaryData.totalSales > 0
+      ? ((summaryData.netProfit / summaryData.totalSales) * 100).toFixed(1)
+      : '0.0'
+  const rangeLabel = dateFrom || dateTo ? `${dateFrom || '...'} - ${dateTo || '...'}` : 'All dates'
 
   const handleDownload = () => {
     const header = ['Order', 'Date', 'Customer', 'Status', 'Payment', 'PaymentState']
@@ -97,6 +122,31 @@ export function ReportScreen({
       onAction?.(`Order filter: ${next}.`)
       return next
     })
+  }
+
+  const applyRange = (preset) => {
+    const nowDate = new Date()
+    if (preset === 'today') {
+      const day = formatDateInputLocal(nowDate)
+      setDateFrom(day)
+      setDateTo(day)
+      return
+    }
+    if (preset === 'week') {
+      const start = new Date(nowDate)
+      start.setDate(start.getDate() - 7)
+      setDateFrom(formatDateInputLocal(start))
+      setDateTo(formatDateInputLocal(nowDate))
+      return
+    }
+    if (preset === 'month') {
+      const start = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1)
+      setDateFrom(formatDateInputLocal(start))
+      setDateTo(formatDateInputLocal(nowDate))
+      return
+    }
+    setDateFrom('')
+    setDateTo('')
   }
 
   return (
@@ -156,32 +206,55 @@ export function ReportScreen({
               <CircleDot size={16} className={showGraph ? 'text-[#2D71F8]' : 'text-slate-400'} />
             </button>
           </div>
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white p-3">
+            {['today', 'week', 'month', 'all'].map((preset) => (
+              <button
+                key={preset}
+                onClick={() => applyRange(preset)}
+                className="ui-btn ui-btn-secondary rounded-full px-3 py-1.5 text-xs text-slate-600"
+              >
+                {preset}
+              </button>
+            ))}
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+              className="ui-input w-[168px] px-2.5 py-1.5 text-xs"
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+              className="ui-input w-[168px] px-2.5 py-1.5 text-xs"
+            />
+          </div>
 
           <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               title="Total Sales Amount"
-              value={formatNumber(summary.totalSales)}
+              value={formatNumber(summaryData.totalSales)}
               unit="USD"
-              delta={`Orders: ${formatNumber(summary.totalOrders)}`}
+              delta={`Orders: ${formatNumber(summaryData.totalOrders)}`}
               growth="Live"
             />
             <MetricCard
               title="Total Product Sales"
-              value={formatNumber(summary.totalOrders)}
+              value={formatNumber(summaryData.totalOrders)}
               unit="Items"
               delta="From SQLite"
               growth="Live"
             />
             <MetricCard
               title="Total Customers"
-              value={formatNumber(summary.totalCustomers)}
+              value={formatNumber(summaryData.totalCustomers)}
               unit="Persons"
               delta="Unique customers"
               growth="Live"
             />
             <MetricCard
               title="Net Profit"
-              value={formatNumber(summary.netProfit)}
+              value={formatNumber(summaryData.netProfit)}
               unit="USD"
               delta="Total - Tax"
               growth="Live"
@@ -284,7 +357,7 @@ export function ReportScreen({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-3">
               <h3 className="text-lg font-semibold text-slate-900">All Orders</h3>
               <div className="flex items-center gap-2">
-                <HeaderChip icon={CalendarDays} label="May 25, 2024 - May 29, 2024" />
+                <HeaderChip icon={CalendarDays} label={rangeLabel} />
                 <HeaderChip icon={Clock3} label="08:00 AM - 01:00 PM" />
                 <button
                   onClick={cyclePaymentFilter}
@@ -398,4 +471,11 @@ function formatNumber(value) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })
+}
+
+function formatDateInputLocal(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }

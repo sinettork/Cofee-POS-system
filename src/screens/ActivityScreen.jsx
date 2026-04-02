@@ -1,5 +1,6 @@
 import { CalendarDays, Menu, Power, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { createTable, fetchOrderDetail, updateTableStatus } from '../api/client'
 import { HeaderChip, StatusDot } from '../components/common'
 import { BILLING_QUEUE, HISTORY_ROWS, TABLE_GROUPS, TRACKING_ORDERS } from '../uiData'
 import { formatCurrency, formatDate } from '../utils/format'
@@ -24,6 +25,7 @@ export function ActivityScreen({
   const [trackingSearchOpen, setTrackingSearchOpen] = useState(false)
   const [trackingSearch, setTrackingSearch] = useState('')
   const [selectedRowDetail, setSelectedRowDetail] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   useEffect(() => {
     setLocalTableGroups(tableGroups)
@@ -80,7 +82,7 @@ export function ActivityScreen({
     }
   }
 
-  const handleAddTable = () => {
+  const handleAddTable = async () => {
     const targetTitles = floorGroups[floor] ?? []
     const targetTitle = targetTitles[0]
     if (!targetTitle) {
@@ -88,33 +90,43 @@ export function ActivityScreen({
       return
     }
     setActionError('')
-    setLocalTableGroups((previous) => {
-      const existingIds = previous.flatMap((group) => group.tables.map((table) => table.id))
-      const nextNumber =
-        existingIds
-          .map((id) => Number(String(id).replace('T-', '')))
-          .filter((value) => Number.isFinite(value))
-          .reduce((max, value) => Math.max(max, value), 0) + 1
+    try {
+      const result = await createTable({ groupTitle: targetTitle })
       const nextTable = {
-        id: `T-${String(nextNumber).padStart(2, '0')}`,
+        id: String(result?.id ?? 'T-01'),
         guest: '0 Guest',
         pax: 0,
         time: '--:--',
         status: 'available',
       }
-      const targetIndex = previous.findIndex((group) => group.title === targetTitle)
-      if (targetIndex === -1) {
-        return [...previous, { title: targetTitle, tables: [nextTable] }]
-      }
-      return previous.map((group, index) =>
-        index === targetIndex ? { ...group, tables: [...group.tables, nextTable] } : group,
-      )
-    })
-    onAction?.(`Added a new table on ${floor}.`)
+      setLocalTableGroups((previous) => {
+        const targetIndex = previous.findIndex((group) => group.title === targetTitle)
+        if (targetIndex === -1) {
+          return [...previous, { title: targetTitle, tables: [nextTable] }]
+        }
+        return previous.map((group, index) =>
+          index === targetIndex ? { ...group, tables: [...group.tables, nextTable] } : group,
+        )
+      })
+      onAction?.(`Added a new table on ${floor}.`)
+    } catch (error) {
+      setActionError(error.message || 'Failed to add table.')
+    }
   }
 
-  const handleCycleTableStatus = (groupTitle, tableId) => {
+  const handleCycleTableStatus = async (groupTitle, tableId) => {
     const statusSequence = ['available', 'reserved', 'served']
+    const group = localTableGroups.find((item) => item.title === groupTitle)
+    const table = group?.tables.find((item) => item.id === tableId)
+    if (!table) return
+    const currentIndex = statusSequence.indexOf(table.status)
+    const nextStatus = statusSequence[(currentIndex + 1) % statusSequence.length]
+    const nextGuest = nextStatus === 'available' ? '0 Guest' : nextStatus === 'reserved' ? 'Reserved' : 'Walk-in'
+    const nextPax = nextStatus === 'available' ? 0 : nextStatus === 'reserved' ? 2 : 1
+    const nextTime = nextStatus === 'available' ? '--:--' : nextStatus === 'reserved' ? '06:00 PM' : 'Now'
+
+    const previousState = localTableGroups
+    setActionError('')
     setLocalTableGroups((previous) =>
       previous.map((group) => {
         if (group.title !== groupTitle) return group
@@ -122,20 +134,41 @@ export function ActivityScreen({
           ...group,
           tables: group.tables.map((table) => {
             if (table.id !== tableId) return table
-            const currentIndex = statusSequence.indexOf(table.status)
-            const nextStatus = statusSequence[(currentIndex + 1) % statusSequence.length]
-            if (nextStatus === 'available') {
-              return { ...table, status: nextStatus, guest: '0 Guest', pax: 0, time: '--:--' }
-            }
-            if (nextStatus === 'reserved') {
-              return { ...table, status: nextStatus, guest: 'Reserved', pax: 2, time: '06:00 PM' }
-            }
-            return { ...table, status: nextStatus, guest: 'Walk-in', pax: 1, time: 'Now' }
+            return { ...table, status: nextStatus, guest: nextGuest, pax: nextPax, time: nextTime }
           }),
         }
       }),
     )
-    onAction?.(`Table ${tableId} status updated.`)
+    try {
+      await updateTableStatus(tableId, {
+        status: nextStatus,
+        guest: nextGuest,
+        pax: nextPax,
+        time: nextTime,
+      })
+      onAction?.(`Table ${tableId} status updated.`)
+    } catch (error) {
+      setLocalTableGroups(previousState)
+      setActionError(error.message || 'Failed to update table status.')
+    }
+  }
+
+  const openDetail = async (type, row) => {
+    setDetailLoading(true)
+    try {
+      const sourceOrder = String(row.order ?? row.id ?? '').trim()
+      const safeOrder = sourceOrder.replace('#', '')
+      if (!safeOrder) {
+        setSelectedRowDetail({ type, row })
+        return
+      }
+      const detail = await fetchOrderDetail(safeOrder)
+      setSelectedRowDetail({ type, row: detail })
+    } catch {
+      setSelectedRowDetail({ type, row })
+    } finally {
+      setDetailLoading(false)
+    }
   }
 
   return (
@@ -176,11 +209,6 @@ export function ActivityScreen({
             >
               Order History
             </button>
-          </div>
-          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-400">
-            <p className="font-semibold text-[#2D71F8]">Bakehouse</p>
-            <p>POS System</p>
-            <p className="mt-2">The dreamy taste and magic of sweet moments in every bite from our bakery.</p>
           </div>
         </aside>
 
@@ -354,7 +382,7 @@ export function ActivityScreen({
                         </span>
                         <div className="mt-2 flex justify-end gap-2">
                           <button
-                            onClick={() => setSelectedRowDetail({ type: 'billing', row })}
+                            onClick={() => openDetail('billing', row)}
                             className="ui-btn ui-btn-secondary px-2.5 py-1 text-xs text-slate-600"
                           >
                             Detail
@@ -469,7 +497,7 @@ export function ActivityScreen({
                         {row.paid ? 'Paid' : 'Unpaid'}
                       </p>
                       <button
-                        onClick={() => setSelectedRowDetail({ type: 'history', row })}
+                        onClick={() => openDetail('history', row)}
                         className="text-[#2D71F8] hover:underline"
                       >
                         Detail
@@ -541,6 +569,27 @@ export function ActivityScreen({
                     selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
                   )}
                 </p>
+              )}
+              {detailLoading && (
+                <p className="text-xs text-slate-400">Loading full order detail...</p>
+              )}
+              {Array.isArray(selectedRowDetail.row?.items) && selectedRowDetail.row.items.length > 0 && (
+                <div className="mt-2 space-y-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Items</p>
+                  {selectedRowDetail.row.items.map((item, index) => (
+                    <div key={`${item.productId}-${index}`} className="flex justify-between gap-2 text-sm">
+                      <span>
+                        {item.productName} x{item.quantity}
+                      </span>
+                      <span>
+                        {formatCurrency(
+                          item.totalPrice,
+                          selectedRowDetail.row.paymentCurrency ?? selectedRowDetail.row.currency ?? 'USD',
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
             <button

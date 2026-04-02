@@ -1,13 +1,15 @@
-import { useEffect, useEffectEvent, useMemo, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react'
 import {
   bulkCreateProductItems,
   clearAuthToken,
+  createCategoryItem,
   createOrder,
   createProductItem,
   deleteProductItem,
   fetchBootstrapData,
   fetchCurrentUser,
   fetchReportSummary,
+  fetchSettings,
   getStoredAuthToken,
   loginWithPassword,
   logoutSession,
@@ -81,6 +83,11 @@ export default function App() {
     reportOrderRows: REPORT_ORDER_ROWS,
     inventoryMovements: [],
   }))
+  const [appSettings, setAppSettings] = useState({
+    taxRate: 10,
+    receiptFooter: true,
+    defaultService: 'Dine In',
+  })
   const [authToken, setAuthToken] = useState(() => getStoredAuthToken())
   const [currentUser, setCurrentUser] = useState(null)
   const [authChecking, setAuthChecking] = useState(true)
@@ -138,16 +145,39 @@ export default function App() {
     return () => controller.abort()
   }, [authToken])
 
+  const handleSignOut = useCallback(async ({ silent = false, authMessage = '' } = {}) => {
+    try {
+      if (!silent) {
+        await logoutSession()
+      } else {
+        clearAuthToken()
+      }
+    } catch {
+      clearAuthToken()
+    }
+    setAuthToken('')
+    setCurrentUser(null)
+    setIsMenuOpen(false)
+    setPage('pos')
+    if (authMessage) {
+      setAuthError(authMessage)
+    } else if (!silent) {
+      setAuthError('')
+      setActionNotice('Signed out from tenant session.')
+    }
+  }, [])
+
   useEffect(() => {
     if (!currentUser) return
     const controller = new AbortController()
 
     const bootstrapPromise = fetchBootstrapData(controller.signal)
     const summaryPromise = fetchReportSummary(controller.signal)
+    const settingsPromise = fetchSettings(controller.signal)
 
-    Promise.allSettled([bootstrapPromise, summaryPromise])
+    Promise.allSettled([bootstrapPromise, summaryPromise, settingsPromise])
       .then((results) => {
-        const [bootstrapResult, summaryResult] = results
+        const [bootstrapResult, summaryResult, settingsResult] = results
 
         if (bootstrapResult.status === 'fulfilled') {
           setAppData(bootstrapResult.value)
@@ -163,13 +193,22 @@ export default function App() {
         if (summaryResult.status === 'fulfilled') {
           setSummary(summaryResult.value)
         }
+        if (settingsResult.status === 'fulfilled') {
+          const nextTaxRate = Number(settingsResult.value?.taxRate ?? 10)
+          const nextSettings = {
+            taxRate: Number.isFinite(nextTaxRate) ? nextTaxRate : 10,
+            receiptFooter: String(settingsResult.value?.receiptFooter ?? 'true').toLowerCase() === 'true',
+            defaultService: String(settingsResult.value?.defaultService ?? 'Dine In') || 'Dine In',
+          }
+          setAppSettings(nextSettings)
+        }
       })
       .catch(() => {
         setSyncError('SQLite API not connected. Running local mock data.')
       })
 
     return () => controller.abort()
-  }, [currentUser])
+  }, [currentUser, handleSignOut])
 
   useEffect(() => {
     if (!actionNotice) return undefined
@@ -188,9 +227,10 @@ export default function App() {
   }
 
   const handlePlaceOrder = async (payload) => {
-    await createOrder(payload)
+    const result = await createOrder(payload)
     await Promise.all([refreshBootstrap(), refreshSummary()])
     setSyncError('')
+    return result
   }
 
   const handleOrderStatusUpdate = async (orderNumber, status, paymentStatus) => {
@@ -201,6 +241,13 @@ export default function App() {
 
   const handleCreateProduct = async (payload) => {
     const created = await createProductItem(payload)
+    await refreshBootstrap()
+    setSyncError('')
+    return created
+  }
+
+  const handleCreateCategory = async (payload) => {
+    const created = await createCategoryItem(payload)
     await refreshBootstrap()
     setSyncError('')
     return created
@@ -229,28 +276,6 @@ export default function App() {
   const handleAction = (message) => {
     setActionNotice(String(message || '').trim())
   }
-
-  const handleSignOut = useEffectEvent(async ({ silent = false, authMessage = '' } = {}) => {
-    try {
-      if (!silent) {
-        await logoutSession()
-      } else {
-        clearAuthToken()
-      }
-    } catch {
-      clearAuthToken()
-    }
-    setAuthToken('')
-    setCurrentUser(null)
-    setIsMenuOpen(false)
-    setPage('pos')
-    if (authMessage) {
-      setAuthError(authMessage)
-    } else if (!silent) {
-      setAuthError('')
-      handleAction('Signed out from tenant session.')
-    }
-  })
 
   const handleLoginSubmit = async ({ username, password }) => {
     setAuthSubmitting(true)
@@ -293,7 +318,9 @@ export default function App() {
             canOpenInventory={allowedPages.includes('inventory')}
             categories={appData.categories}
             products={appData.products}
+            tableGroups={appData.tableGroups}
             trackingOrders={appData.trackingOrders}
+            taxRate={Math.max(0, Number(appSettings.taxRate ?? 10)) / 100}
             onOpenMenu={() => setIsMenuOpen(true)}
             onNavigate={setPage}
             onPlaceOrder={handlePlaceOrder}
@@ -333,10 +360,17 @@ export default function App() {
             canManageCatalog={canManageCatalog}
             onOpenMenu={() => setIsMenuOpen(true)}
             onAction={handleAction}
+            onCreateCategory={handleCreateCategory}
             onCreateProduct={handleCreateProduct}
             onUpdateProduct={handleUpdateProduct}
             onDeleteProduct={handleDeleteProduct}
             onBulkCreateProducts={handleBulkCreateProducts}
+            settingsBootstrap={appSettings}
+            currentUserRole={String(currentUser?.role ?? '').toLowerCase()}
+            onSettingsChange={(nextSettings) => {
+              if (!nextSettings) return
+              setAppSettings((previous) => ({ ...previous, ...nextSettings }))
+            }}
           />
         )}
       </div>

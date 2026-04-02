@@ -1,36 +1,112 @@
 import express from 'express'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
+import { CURRENCY as KHQRCurrency, KHQR, TAG } from 'ts-khqr'
 import {
+  createCategory,
+  createKhqrTransaction,
   createOrder,
   createProduct,
+  db,
   deleteProduct,
+  getKhqrTransactionByMd5,
   getBootstrapData,
   getInventoryMovements,
   getProductById,
   getProductCatalog,
   getReportSummary,
   getUserByUsername,
+  updateKhqrTransactionStatus,
   updateOrderStatus,
   updateProduct,
   verifyUserCredentials,
 } from './db.js'
 
 const app = express()
-const port = 4000
+const port = Number(process.env.PORT ?? 4000)
 const EXCHANGE_RATE_KHR = 4100
 const ORDER_TYPES = new Set(['Dine In', 'Take Away'])
 const ORDER_STATUSES = new Set(['Active', 'Closed', 'Done', 'Canceled'])
 const PAYMENT_STATUSES = new Set(['Paid', 'Unpaid'])
 const PAYMENT_METHODS = new Set(['Cash', 'KHQR', 'Card'])
+const USER_ROLES = new Set(['admin', 'manager', 'cashier'])
+const SETTING_KEYS = new Set(['taxRate', 'receiptFooter', 'defaultService'])
 const ROLE_CATALOG_MANAGER = ['admin', 'manager']
 const ROLE_OPERATOR = ['admin', 'manager', 'cashier']
+const ROLE_ADMIN = ['admin']
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12
 const sessionStore = new Map()
+const ENV_FILE_PATH = path.resolve(process.cwd(), '.env')
+
+reloadEnvFromDotFile()
+
+const BAKONG_CHECK_BY_MD5_ENDPOINT =
+  process.env.BAKONG_CHECK_BY_MD5_ENDPOINT ?? 'https://api-bakong.nbc.gov.kh/v1/check_transaction_by_md5'
+const KHQR_EXPIRE_MS = 10 * 60 * 1000
 
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
+})
+
+app.get('/api/public/catalog', (_req, res) => {
+  try {
+    const catalog = getProductCatalog()
+    const products = catalog.products
+      .filter((item) => Number(item.stockQty ?? 0) > 0)
+      .sort((left, right) => String(left.name).localeCompare(String(right.name)))
+    const countByCategory = new Map()
+    products.forEach((product) => {
+      const key = String(product.category ?? '')
+      if (!key) return
+      countByCategory.set(key, Number(countByCategory.get(key) ?? 0) + 1)
+    })
+    const categories = catalog.categories
+      .filter((category) => countByCategory.has(String(category.id)))
+      .map((category) => ({
+        id: category.id,
+        name: category.name,
+        count: Number(countByCategory.get(String(category.id)) ?? 0),
+      }))
+    const taxRateValue = db.prepare("SELECT value FROM settings WHERE key = 'taxRate' LIMIT 1").get()?.value
+    const parsedTaxRate = Number(taxRateValue ?? 10)
+    const taxRate = Number.isFinite(parsedTaxRate) ? Math.max(0, parsedTaxRate) : 10
+    res.json({
+      categories,
+      products,
+      currency: 'USD',
+      taxRate,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Unable to load public product catalog.', details: String(error.message) })
+  }
+})
+
+app.post('/api/public/orders', (req, res) => {
+  const payload = parsePublicOnlineOrderPayload(req.body ?? {})
+  if (!payload.ok) {
+    res.status(400).json({ error: payload.error })
+    return
+  }
+
+  try {
+    const result = createOrder(payload.value)
+    res.status(201).json({
+      orderId: result.orderId,
+      orderNumber: result.orderNumber,
+      status: 'Active',
+      paymentStatus: 'Unpaid',
+      message: 'Order received. Please wait for shop confirmation.',
+    })
+  } catch (error) {
+    if (error?.code === 'PRODUCT_NOT_FOUND' || error?.code === 'INSUFFICIENT_STOCK') {
+      res.status(400).json({ error: String(error.message || 'Unable to create order.') })
+      return
+    }
+    res.status(500).json({ error: 'Failed to create public order.', details: String(error.message) })
+  }
 })
 
 app.post('/api/auth/login', (req, res) => {
@@ -97,6 +173,24 @@ app.get('/api/bootstrap', requireRoles(ROLE_OPERATOR), (_req, res) => {
     res.json(getBootstrapData())
   } catch (error) {
     res.status(500).json({ error: 'Unable to load bootstrap data.', details: String(error.message) })
+  }
+})
+
+app.post('/api/categories', requireRoles(ROLE_CATALOG_MANAGER), (req, res) => {
+  const payload = sanitizeCategoryPayload(req.body ?? {})
+  if (!payload.ok) {
+    res.status(400).json({ error: payload.error })
+    return
+  }
+  try {
+    const created = createCategory(payload.value)
+    res.status(201).json(created)
+  } catch (error) {
+    if (String(error.message).includes('UNIQUE constraint failed: categories.id')) {
+      res.status(409).json({ error: 'Category id already exists.' })
+      return
+    }
+    res.status(500).json({ error: 'Unable to create category.', details: String(error.message) })
   }
 })
 
@@ -262,6 +356,175 @@ app.post('/api/orders', requireRoles(ROLE_OPERATOR), (req, res) => {
   }
 })
 
+app.post('/api/khqr/generate', requireRoles(ROLE_OPERATOR), (req, res) => {
+  reloadEnvFromDotFile()
+  const currency = sanitizeCurrency(req.body?.currency)
+  const rawAmount = Number(req.body?.amount ?? 0)
+  const amount = normalizeKhqrAmount(rawAmount, currency)
+  const incomingBillNumber = String(req.body?.billNumber ?? '').trim()
+  const billNumber = incomingBillNumber || createBillNumber()
+  const accountID = readEnvValue(['BAKONG_ACCOUNT_ID', 'BAKONG_ACCOUNTID', 'accountID', 'accountId'])
+  const merchantName = readEnvValue(['BAKONG_MERCHANT_NAME'], 'Bakehouse POS')
+  const merchantCity = readEnvValue(['BAKONG_MERCHANT_CITY'], 'Phnom Penh')
+  const merchantTag = readEnvValue(['BAKONG_MERCHANT_TAG'], 'INDIVIDUAL').toUpperCase()
+
+  if (!accountID) {
+    res.status(500).json({
+      error: 'Bakong account id is missing. Set BAKONG_ACCOUNT_ID (or accountID/accountId) in .env or server environment.',
+    })
+    return
+  }
+  if (!Number.isFinite(rawAmount) || rawAmount <= 0) {
+    res.status(400).json({ error: 'amount must be a positive number.' })
+    return
+  }
+
+  const expiresAt = new Date(Date.now() + KHQR_EXPIRE_MS)
+  const generation = KHQR.generate({
+    tag: merchantTag === 'MERCHANT' ? TAG.MERCHANT : TAG.INDIVIDUAL,
+    accountID,
+    merchantName,
+    merchantCity,
+    currency: currency === 'KHR' ? KHQRCurrency.KHR : KHQRCurrency.USD,
+    amount,
+    expirationTimestamp: expiresAt.getTime(),
+    additionalData: {
+      billNumber,
+      storeLabel: String(process.env.BAKONG_STORE_LABEL ?? 'Bakehouse'),
+    },
+  })
+
+  if (!generation || Number(generation.status?.code ?? -1) !== 0 || !generation.data?.qr || !generation.data?.md5) {
+    res.status(400).json({
+      error: String(generation?.status?.message ?? 'Unable to generate KHQR payload.'),
+      details: generation?.status ?? null,
+    })
+    return
+  }
+
+  try {
+    createKhqrTransaction({
+      billNumber,
+      md5: generation.data.md5,
+      qrString: generation.data.qr,
+      amount,
+      currency,
+      status: 'UNPAID',
+      createdAt: new Date().toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    })
+  } catch (error) {
+    if (String(error.message).includes('UNIQUE constraint failed: khqr_transactions.bill_number')) {
+      res.status(409).json({ error: `billNumber "${billNumber}" already exists.` })
+      return
+    }
+    if (String(error.message).includes('UNIQUE constraint failed: khqr_transactions.md5')) {
+      res.status(409).json({ error: 'Generated md5 is duplicated. Please retry.' })
+      return
+    }
+    res.status(500).json({ error: 'Failed to store KHQR transaction.', details: String(error.message) })
+    return
+  }
+
+  res.json({
+    billNumber,
+    qr: generation.data.qr,
+    md5: generation.data.md5,
+    amount,
+    currency,
+    expiresAt: expiresAt.toISOString(),
+  })
+})
+
+app.get('/api/khqr/status/:md5', requireRoles(ROLE_OPERATOR), async (req, res) => {
+  reloadEnvFromDotFile()
+  const md5 = String(req.params.md5 ?? '').trim()
+  if (!md5) {
+    res.status(400).json({ error: 'md5 is required.' })
+    return
+  }
+  const transaction = getKhqrTransactionByMd5(md5)
+  if (!transaction) {
+    res.status(404).json({ error: 'KHQR transaction not found.' })
+    return
+  }
+  if (transaction.status === 'PAID') {
+    res.json({
+      paid: true,
+      status: 'PAID',
+      billNumber: transaction.billNumber,
+      md5: transaction.md5,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      paidAt: transaction.paidAt,
+    })
+    return
+  }
+
+  const now = new Date()
+  const expiresAt = new Date(transaction.expiresAt)
+  if (!Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() <= now.getTime()) {
+    updateKhqrTransactionStatus(md5, {
+      status: 'EXPIRED',
+      lastCheckedAt: now.toISOString(),
+      checkResponseJson: transaction.checkResponseJson || '{}',
+    })
+    res.json({
+      paid: false,
+      status: 'EXPIRED',
+      billNumber: transaction.billNumber,
+      md5: transaction.md5,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      expired: true,
+    })
+    return
+  }
+
+  const token = readEnvValue(['BAKONG_TOKEN'])
+  if (!token) {
+    res.status(500).json({ error: 'BAKONG_TOKEN is missing in server environment.' })
+    return
+  }
+
+  let rawStatus
+  try {
+    const response = await fetch(BAKONG_CHECK_BY_MD5_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ md5 }),
+    })
+    rawStatus = await response.json()
+  } catch (error) {
+    res.status(502).json({ error: 'Failed to reach Bakong status API.', details: String(error.message) })
+    return
+  }
+
+  const responseCode = Number(rawStatus?.responseCode ?? rawStatus?.status?.code ?? -1)
+  const paid = responseCode === 0
+  const nextStatus = paid ? 'PAID' : 'UNPAID'
+  const checkedAt = new Date().toISOString()
+  updateKhqrTransactionStatus(md5, {
+    status: nextStatus,
+    paidAt: paid ? checkedAt : null,
+    lastCheckedAt: checkedAt,
+    checkResponseJson: safeJsonStringify(rawStatus),
+  })
+
+  res.json({
+    paid,
+    status: nextStatus,
+    billNumber: transaction.billNumber,
+    md5: transaction.md5,
+    amount: transaction.amount,
+    currency: transaction.currency,
+    data: rawStatus,
+  })
+})
+
 app.patch('/api/orders/:orderNumber/status', requireRoles(ROLE_OPERATOR), (req, res) => {
   const orderNumber = `#${String(req.params.orderNumber).replace('#', '')}`
   const nextStatus = sanitizeOrderStatus(req.body?.status)
@@ -301,9 +564,305 @@ app.patch('/api/orders/:orderNumber/status', requireRoles(ROLE_OPERATOR), (req, 
   }
 })
 
-app.get('/api/reports/summary', requireRoles(ROLE_OPERATOR), (_req, res) => {
+app.get('/api/orders/:orderNumber', requireRoles(ROLE_OPERATOR), (req, res) => {
+  const orderNumber = `#${String(req.params.orderNumber).replace('#', '')}`
   try {
-    res.json(getReportSummary())
+    const order = db
+      .prepare(
+        `
+        SELECT
+          id,
+          order_number,
+          customer_name,
+          table_name,
+          order_type,
+          payment_method,
+          payment_status,
+          currency,
+          payment_currency,
+          amount_received,
+          change_amount,
+          status,
+          kitchen_status,
+          created_at,
+          subtotal,
+          tax,
+          discount,
+          total
+        FROM orders
+        WHERE order_number = ?
+      `,
+      )
+      .get(orderNumber)
+    if (!order) {
+      res.status(404).json({ error: 'Order not found.' })
+      return
+    }
+    const items = db
+      .prepare(
+        `
+        SELECT product_id, product_name, quantity, unit_price, total_price, options_json, notes
+        FROM order_items
+        WHERE order_id = ?
+      `,
+      )
+      .all(order.id)
+      .map((row) => ({
+        productId: row.product_id,
+        productName: row.product_name,
+        quantity: Number(row.quantity ?? 0),
+        unitPrice: Number(row.unit_price ?? 0),
+        totalPrice: Number(row.total_price ?? 0),
+        options: parseJsonObject(row.options_json),
+        notes: row.notes ?? '',
+      }))
+
+    res.json({
+      order: order.order_number,
+      customer: order.customer_name,
+      table: order.table_name,
+      orderType: order.order_type,
+      status: order.status,
+      kitchenStatus: order.kitchen_status,
+      payment: Number(order.subtotal ?? 0),
+      subtotal: Number(order.subtotal ?? 0),
+      tax: Number(order.tax ?? 0),
+      discount: Number(order.discount ?? 0),
+      total: Number(order.total ?? 0),
+      paymentStatus: order.payment_status,
+      paymentMethod: order.payment_method,
+      currency: order.currency ?? 'USD',
+      paymentCurrency: order.payment_currency || order.currency || 'USD',
+      amountReceived: Number(order.amount_received ?? 0),
+      changeAmount: Number(order.change_amount ?? 0),
+      createdAt: order.created_at,
+      items,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load order detail.', details: String(error.message) })
+  }
+})
+
+app.patch('/api/tables/:tableId', requireRoles(ROLE_OPERATOR), (req, res) => {
+  const tableId = String(req.params.tableId ?? '').trim()
+  const status = String(req.body?.status ?? '').trim().toLowerCase()
+  const guest = String(req.body?.guest ?? '0 Guest').trim()
+  const pax = Number(req.body?.pax ?? 0)
+  const timeLabel = String(req.body?.time ?? '--:--').trim()
+  const validStatuses = new Set(['available', 'reserved', 'served'])
+  if (!tableId || !validStatuses.has(status)) {
+    res.status(400).json({ error: 'Invalid tableId or status.' })
+    return
+  }
+  if (!Number.isFinite(pax) || pax < 0) {
+    res.status(400).json({ error: 'Invalid pax value.' })
+    return
+  }
+  try {
+    const result = db
+      .prepare(
+        `
+        UPDATE dining_tables
+        SET status = ?, guest_name = ?, pax = ?, time_label = ?
+        WHERE id = ?
+      `,
+      )
+      .run(status, guest || '0 Guest', Math.floor(pax), timeLabel || '--:--', tableId)
+    if (result.changes === 0) {
+      res.status(404).json({ error: 'Table not found.' })
+      return
+    }
+    res.json({ ok: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update table.', details: String(error.message) })
+  }
+})
+
+app.post('/api/tables', requireRoles(ROLE_OPERATOR), (req, res) => {
+  const groupTitle = String(req.body?.groupTitle ?? '').trim()
+  if (!groupTitle) {
+    res.status(400).json({ error: 'groupTitle is required.' })
+    return
+  }
+  try {
+    const rows = db.prepare('SELECT id FROM dining_tables').all()
+    const nextNumber =
+      rows
+        .map((row) => Number(String(row.id ?? '').replace('T-', '')))
+        .filter((value) => Number.isFinite(value))
+        .reduce((max, value) => Math.max(max, value), 0) + 1
+    const tableId = `T-${String(nextNumber).padStart(2, '0')}`
+    db.prepare(
+      `
+      INSERT INTO dining_tables (id, group_title, guest_name, pax, time_label, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    ).run(tableId, groupTitle, '0 Guest', 0, '--:--', 'available')
+    res.status(201).json({ ok: true, id: tableId })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create table.', details: String(error.message) })
+  }
+})
+
+app.get('/api/settings', requireRoles(ROLE_OPERATOR), (_req, res) => {
+  try {
+    const rows = db.prepare('SELECT key, value FROM settings ORDER BY key').all()
+    const result = {}
+    rows.forEach((row) => {
+      result[row.key] = row.value
+    })
+    res.json(result)
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load settings.', details: String(error.message) })
+  }
+})
+
+app.patch('/api/settings', requireRoles(ROLE_CATALOG_MANAGER), (req, res) => {
+  const updates = req.body && typeof req.body === 'object' ? req.body : {}
+  const entries = Object.entries(updates).filter(([key]) => SETTING_KEYS.has(String(key)))
+  if (entries.length === 0) {
+    res.json({ ok: true })
+    return
+  }
+  const upsert = db.prepare(`
+    INSERT INTO settings (key, value)
+    VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `)
+  try {
+    db.exec('BEGIN IMMEDIATE TRANSACTION')
+    entries.forEach(([key, value]) => {
+      upsert.run(String(key), String(value ?? ''))
+    })
+    db.exec('COMMIT')
+    res.json({ ok: true })
+  } catch (error) {
+    db.exec('ROLLBACK')
+    res.status(500).json({ error: 'Failed to save settings.', details: String(error.message) })
+  }
+})
+
+app.get('/api/users', requireRoles(ROLE_CATALOG_MANAGER), (_req, res) => {
+  try {
+    const rows = db
+      .prepare(
+        `
+        SELECT id, username, display_name, role, active, created_at
+        FROM users
+        ORDER BY id
+      `,
+      )
+      .all()
+      .map((row) => ({
+        id: Number(row.id),
+        username: row.username,
+        displayName: row.display_name,
+        role: row.role,
+        active: Boolean(row.active),
+        createdAt: row.created_at,
+      }))
+    res.json({ users: rows })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load users.', details: String(error.message) })
+  }
+})
+
+app.post('/api/users', requireRoles(ROLE_ADMIN), (req, res) => {
+  const username = String(req.body?.username ?? '').trim().toLowerCase()
+  const displayName = String(req.body?.displayName ?? '').trim()
+  const role = String(req.body?.role ?? '').trim().toLowerCase()
+  const password = String(req.body?.password ?? '')
+  if (!username || !displayName || !password || !USER_ROLES.has(role)) {
+    res.status(400).json({ error: 'username, displayName, role, and password are required.' })
+    return
+  }
+  try {
+    db.prepare(
+      `
+      INSERT INTO users (username, display_name, role, password_digest, active, created_at)
+      VALUES (?, ?, ?, ?, 1, ?)
+    `,
+    ).run(username, displayName, role, hashPassword(password, username), new Date().toISOString())
+    res.status(201).json({ ok: true })
+  } catch (error) {
+    if (String(error.message).includes('UNIQUE constraint failed: users.username')) {
+      res.status(409).json({ error: 'Username already exists.' })
+      return
+    }
+    res.status(500).json({ error: 'Failed to create user.', details: String(error.message) })
+  }
+})
+
+app.patch('/api/users/:userId', requireRoles(ROLE_ADMIN), (req, res) => {
+  const userId = Number(req.params.userId)
+  if (!Number.isFinite(userId) || userId <= 0) {
+    res.status(400).json({ error: 'Invalid userId.' })
+    return
+  }
+
+  const fields = []
+  const values = []
+  if (req.body?.active !== undefined) {
+    fields.push('active = ?')
+    values.push(req.body.active ? 1 : 0)
+  }
+  if (req.body?.role !== undefined) {
+    const role = String(req.body.role).trim().toLowerCase()
+    if (!USER_ROLES.has(role)) {
+      res.status(400).json({ error: 'Invalid role.' })
+      return
+    }
+    fields.push('role = ?')
+    values.push(role)
+  }
+  if (req.body?.displayName !== undefined) {
+    const displayName = String(req.body.displayName ?? '').trim()
+    if (!displayName) {
+      res.status(400).json({ error: 'displayName cannot be empty.' })
+      return
+    }
+    fields.push('display_name = ?')
+    values.push(displayName)
+  }
+  if (req.body?.password !== undefined) {
+    const password = String(req.body.password ?? '')
+    if (!password) {
+      res.status(400).json({ error: 'password cannot be empty.' })
+      return
+    }
+    const usernameRow = db.prepare('SELECT username FROM users WHERE id = ?').get(userId)
+    if (!usernameRow) {
+      res.status(404).json({ error: 'User not found.' })
+      return
+    }
+    fields.push('password_digest = ?')
+    values.push(hashPassword(password, usernameRow.username))
+  }
+  if (fields.length === 0) {
+    res.json({ ok: true })
+    return
+  }
+
+  values.push(userId)
+  try {
+    const result = db
+      .prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`)
+      .run(...values)
+    if (result.changes === 0) {
+      res.status(404).json({ error: 'User not found.' })
+      return
+    }
+    res.json({ ok: true })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user.', details: String(error.message) })
+  }
+})
+
+app.get('/api/reports/summary', requireRoles(ROLE_OPERATOR), (req, res) => {
+  const from = req.query?.from ? String(req.query.from) : null
+  const to = req.query?.to ? String(req.query.to) : null
+  try {
+    res.json(getReportSummary({ from, to }))
   } catch (error) {
     res.status(500).json({ error: 'Failed to load report summary.', details: String(error.message) })
   }
@@ -364,6 +923,33 @@ function sanitizeProductPayload(source) {
   }
 }
 
+function sanitizeCategoryPayload(source) {
+  const name = String(source.name ?? '').trim()
+  if (!name) return { ok: false, error: 'Category name is required.' }
+
+  const categoryIdSource = String(source.id ?? '').trim()
+  const slugBase = slugifyCategoryId(categoryIdSource || name)
+  if (!slugBase) return { ok: false, error: 'Category id is invalid.' }
+  if (slugBase === 'all') return { ok: false, error: 'Category id "all" is reserved.' }
+
+  return {
+    ok: true,
+    value: {
+      id: slugBase,
+      name,
+    },
+  }
+}
+
+function slugifyCategoryId(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+}
+
 function sanitizePaymentMethod(value) {
   const normalized = String(value ?? '').trim().toUpperCase()
   if (normalized === 'CARD') return 'Card'
@@ -391,6 +977,15 @@ function sanitizeOrderStatus(value) {
 
 function sanitizeCurrency(value) {
   return String(value ?? '').trim().toUpperCase() === 'KHR' ? 'KHR' : 'USD'
+}
+
+function normalizeKhqrAmount(value, currency) {
+  const amount = Number(value ?? 0)
+  if (!Number.isFinite(amount)) return Number.NaN
+  if (currency === 'KHR') {
+    return Math.round(amount)
+  }
+  return Number(amount.toFixed(2))
 }
 
 function convertCurrency(value, fromCurrency, toCurrency) {
@@ -517,6 +1112,94 @@ function parseCreateOrderPayload(source) {
   }
 }
 
+function parsePublicOnlineOrderPayload(source) {
+  const customerName = String(source.customerName ?? '').trim()
+  const phone = String(source.phone ?? '').trim()
+  const note = String(source.note ?? '').trim()
+  if (!customerName) {
+    return { ok: false, error: 'customerName is required.' }
+  }
+  if (!Array.isArray(source.items) || source.items.length === 0) {
+    return { ok: false, error: 'At least one order item is required.' }
+  }
+
+  const groupedItems = new Map()
+  for (const rawItem of source.items) {
+    const productId = String(rawItem?.productId ?? '').trim()
+    const quantity = Number(rawItem?.quantity ?? 0)
+    if (!productId) return { ok: false, error: 'Each item requires productId.' }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return { ok: false, error: `Invalid quantity for ${productId}.` }
+    }
+    groupedItems.set(productId, Number(groupedItems.get(productId) ?? 0) + Math.floor(quantity))
+  }
+
+  const findProduct = db.prepare(`
+    SELECT id, name, base_price, stock_qty
+    FROM products
+    WHERE id = ?
+  `)
+  const settingsTaxRate = Number(
+    db.prepare("SELECT value FROM settings WHERE key = 'taxRate' LIMIT 1").get()?.value ?? 10,
+  )
+  const taxRate = Number.isFinite(settingsTaxRate) ? Math.max(0, settingsTaxRate) / 100 : 0.1
+
+  let subtotal = 0
+  let index = 0
+  const items = []
+  for (const [productId, quantity] of groupedItems.entries()) {
+    const product = findProduct.get(productId)
+    if (!product) {
+      return { ok: false, error: `Product ${productId} not found.` }
+    }
+    const available = Number(product.stock_qty ?? 0)
+    if (quantity > available + 0.000001) {
+      return {
+        ok: false,
+        error: `Insufficient stock for ${product.name}. Available ${available}, requested ${quantity}.`,
+      }
+    }
+    const itemPrice = Number(product.base_price ?? 0)
+    const totalPrice = Number((itemPrice * quantity).toFixed(2))
+    subtotal += totalPrice
+    items.push({
+      productId: String(product.id),
+      productName: String(product.name),
+      quantity,
+      itemPrice,
+      totalPrice,
+      selectedOptions: {},
+      notes: index === 0 && note ? `Online note: ${note.slice(0, 220)}` : '',
+    })
+    index += 1
+  }
+
+  const normalizedSubtotal = Number(subtotal.toFixed(2))
+  const tax = Number((normalizedSubtotal * taxRate).toFixed(2))
+  const total = Number((normalizedSubtotal + tax).toFixed(2))
+  const normalizedPhone = phone.replace(/\s+/g, ' ').slice(0, 30)
+
+  return {
+    ok: true,
+    value: {
+      customerName: customerName.slice(0, 80),
+      tableName: normalizedPhone ? `Online (${normalizedPhone})` : 'Online',
+      orderType: 'Take Away',
+      paymentMethod: 'Cash',
+      paymentStatus: 'Unpaid',
+      currency: 'USD',
+      paymentCurrency: 'USD',
+      amountReceived: 0,
+      changeAmount: 0,
+      subtotal: normalizedSubtotal,
+      tax,
+      discount: 0,
+      total,
+      items,
+    },
+  }
+}
+
 function createSessionToken() {
   return randomBytes(24).toString('hex')
 }
@@ -557,4 +1240,83 @@ function readBearerToken(headerValue) {
   const value = String(headerValue ?? '').trim()
   if (!value.toLowerCase().startsWith('bearer ')) return ''
   return value.slice(7).trim()
+}
+
+function hashPassword(password, username = '') {
+  const pepper = process.env.POS_AUTH_PEPPER || 'tenant-pos-auth-pepper'
+  const normalizedUsername = String(username ?? '').trim().toLowerCase()
+  return createHash('sha256')
+    .update(`${normalizedUsername}|${String(password ?? '')}|${pepper}`)
+    .digest('hex')
+}
+
+function parseJsonObject(input) {
+  if (!input) return {}
+  try {
+    const parsed = JSON.parse(input)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {}
+    }
+    return parsed
+  } catch {
+    return {}
+  }
+}
+
+function createBillNumber() {
+  const stamp = new Date().toISOString().replace(/[^\d]/g, '').slice(0, 14)
+  const random = randomBytes(3).toString('hex').toUpperCase()
+  return `INV-${stamp}-${random}`
+}
+
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value ?? {})
+  } catch {
+    return '{}'
+  }
+}
+
+function readEnvValue(keys = [], fallback = '') {
+  const safeKeys = Array.isArray(keys) ? keys : [keys]
+  for (const key of safeKeys) {
+    const envKey = String(key ?? '').trim()
+    if (!envKey) continue
+    const value = String(process.env[envKey] ?? '').trim()
+    if (value) return value
+  }
+  return String(fallback ?? '').trim()
+}
+
+function reloadEnvFromDotFile(filePath = ENV_FILE_PATH) {
+  let content = ''
+  try {
+    content = fs.readFileSync(filePath, 'utf8')
+  } catch {
+    return
+  }
+  const lines = content.split(/\r?\n/)
+  lines.forEach((rawLine) => {
+    const line = String(rawLine ?? '').trim()
+    if (!line || line.startsWith('#')) return
+    const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
+    if (!match) return
+    const key = String(match[1] ?? '').trim()
+    if (!key) return
+    process.env[key] = parseDotEnvValue(match[2] ?? '')
+  })
+}
+
+function parseDotEnvValue(rawValue) {
+  const value = String(rawValue ?? '').trim()
+  if (!value) return ''
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1)
+  }
+  const commentIndex = value.indexOf(' #')
+  const cleaned = commentIndex >= 0 ? value.slice(0, commentIndex) : value
+  return cleaned.trim()
 }

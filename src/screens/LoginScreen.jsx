@@ -69,12 +69,6 @@ export function LoginScreen({ loading = false, error = '', onSubmit }) {
           </button>
         </form>
 
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-          <p className="font-semibold text-slate-700">Demo Accounts</p>
-          <p className="mt-1">admin / admin123</p>
-          <p>manager / manager123</p>
-          <p>cashier / cashier123</p>
-        </div>
       </section>
     </div>
   )

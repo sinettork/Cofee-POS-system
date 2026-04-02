@@ -16,6 +16,8 @@
     --ui-text-soft: #475569;
     --ui-danger: #fc4a4a;
     --ui-success: #1c8370;
+    --neutralb-600: #2e2e2e;
+    --textpb-01: #333333;
   }
 
   * {
@@ -46,6 +48,10 @@
 }
 
 @layer components {
+  .all-\[unset\] {
+    all: unset;
+  }
+
   .ui-surface {
     border: 1px solid var(--ui-border-soft);
     border-radius: 1rem;
@@ -189,5 +195,27 @@
 
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .receipt-root,
+  .receipt-root * {
+    visibility: visible !important;
+  }
+
+  .receipt-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  .no-print {
+    display: none !important;
   }
 }

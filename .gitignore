@@ -28,3 +28,4 @@ coffee_db.sqlite
 *.njsproj
 *.sln
 *.sw?
+.env

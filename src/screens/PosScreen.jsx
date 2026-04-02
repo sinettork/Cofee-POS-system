@@ -14,10 +14,10 @@ import {
   Search,
   UserRound,
 } from 'lucide-react'
-import { useDeferredValue, useEffect, useRef, useState, startTransition } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, startTransition } from 'react'
 import { PaymentModal } from '../components/PaymentModal'
 import { ProductModal } from '../components/ProductModal'
-import { HeaderChip, PriceRow, RailButton } from '../components/common'
+import { HeaderChip, RailButton } from '../components/common'
 import { CATEGORY_ITEMS, PAGE_ITEMS, PRODUCT_ITEMS, TRACKING_ORDERS } from '../uiData'
 import { formatCurrency, formatDate, formatTime } from '../utils/format'
 
@@ -31,7 +31,9 @@ export function PosScreen({
   onNavigate,
   categories = [],
   products = PRODUCT_ITEMS,
+  tableGroups = [],
   trackingOrders = TRACKING_ORDERS,
+  taxRate = 0.1,
   onPlaceOrder,
   onAction,
   onSignOut,
@@ -43,7 +45,7 @@ export function PosScreen({
   const [placingOrder, setPlacingOrder] = useState(false)
   const [placeError, setPlaceError] = useState('')
   const [customerName, setCustomerName] = useState('Eloise')
-  const [tableName, setTableName] = useState('Table 05')
+  const [tableName, setTableName] = useState('Table 01')
   const [orderType, setOrderType] = useState('Dine In')
   const [discountRate, setDiscountRate] = useState(0)
   const [paymentMethod, setPaymentMethod] = useState('Cash')
@@ -58,14 +60,31 @@ export function PosScreen({
   const customerInputRef = useRef(null)
   const stockAlertPanelRef = useRef(null)
 
-  const mergedCategories = CATEGORY_ITEMS.map((baseCategory) => {
-    const fromApi = categories.find((item) => item.id === baseCategory.id)
-    return {
-      ...baseCategory,
-      name: fromApi?.name ?? baseCategory.name,
-      count: fromApi?.count ?? baseCategory.count,
-    }
-  })
+  const mergedCategories = useMemo(() => {
+    const baseById = new Map(CATEGORY_ITEMS.map((item) => [item.id, item]))
+    const mergedBase = CATEGORY_ITEMS.map((baseCategory) => {
+      const fromApi = categories.find((item) => item.id === baseCategory.id)
+      return {
+        ...baseCategory,
+        name: fromApi?.name ?? baseCategory.name,
+        count: fromApi?.count ?? baseCategory.count,
+      }
+    })
+
+    const dynamicCategories = categories
+      .filter((item) => item.id !== 'all' && !baseById.has(item.id))
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        count:
+          Number.isFinite(Number(item.count))
+            ? Number(item.count)
+            : products.filter((product) => product.category === item.id).length,
+        icon: Coffee,
+      }))
+
+    return [...mergedBase, ...dynamicCategories]
+  }, [categories, products])
 
   const deferredSearch = useDeferredValue(searchQuery)
   const keyword = deferredSearch.trim().toLowerCase()
@@ -74,9 +93,24 @@ export function PosScreen({
     const matchesSearch = product.name.toLowerCase().includes(keyword)
     return matchesCategory && matchesSearch
   })
+  const allTables = useMemo(() => {
+    const values = tableGroups.flatMap((group) =>
+      (group.tables ?? []).map((table) => {
+        const digits = String(table.id ?? '').replace(/^T-?/i, '')
+        return {
+          id: String(table.id ?? ''),
+          label: digits ? `Table ${digits}` : String(table.id ?? 'Table 01'),
+        }
+      }),
+    )
+    if (values.length > 0) return values
+    return [{ id: 'T-01', label: 'Table 01' }]
+  }, [tableGroups])
+  const resolvedTaxRate = Number.isFinite(Number(taxRate)) ? Math.max(0, Number(taxRate)) : 0.1
+  const taxLabel = `Tax (${(resolvedTaxRate * 100).toFixed(1).replace(/\.0$/, '')}%)`
 
   const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0)
-  const tax = subtotal * 0.1
+  const tax = subtotal * resolvedTaxRate
   const discount = subtotal * discountRate
   const total = subtotal + tax - discount
   const currency = DEFAULT_CURRENCY
@@ -134,9 +168,7 @@ export function PosScreen({
       if (left.state !== right.state) return left.state === 'out' ? -1 : 1
       return left.stockQty - right.stockQty
     })
-  const stockAlertCount = stockAlerts.reduce((totalCount, _product) => {
-    return totalCount + 1
-  }, 0)
+  const stockAlertCount = stockAlerts.length
   const stockAlertPreview = stockAlerts.slice(0, 5)
 
   useEffect(() => {
@@ -154,6 +186,18 @@ export function PosScreen({
       setStockAlertOpen(false)
     }
   }, [canOpenInventory])
+
+  useEffect(() => {
+    if (mergedCategories.some((item) => item.id === activeCategory)) return
+    setActiveCategory('all')
+  }, [activeCategory, mergedCategories])
+
+  useEffect(() => {
+    const hasCurrent = allTables.some((table) => table.label === tableName)
+    if (!hasCurrent) {
+      setTableName(allTables[0]?.label ?? 'Table 01')
+    }
+  }, [allTables, tableName])
 
   const goToInventoryFromAlert = () => {
     setStockAlertOpen(false)
@@ -291,8 +335,9 @@ export function PosScreen({
     setPlaceError('')
 
     try {
+      let result = { orderNumber: 'Draft' }
       if (onPlaceOrder) {
-        await onPlaceOrder({
+        result = await onPlaceOrder({
           customerName,
           tableName,
           orderType,
@@ -317,11 +362,8 @@ export function PosScreen({
           })),
         })
       }
-      setCart([])
       setPaymentMethod(selectedPaymentMethod)
-      setPaymentModalOpen(false)
-      onAction?.(`Order placed successfully (${selectedPaymentMethod}).`)
-      return true
+      return result || { orderNumber: 'Draft' }
     } catch (error) {
       setPlaceError(error.message || 'Failed to place order.')
       return false
@@ -635,12 +677,11 @@ export function PosScreen({
               onChange={(event) => setTableName(event.target.value)}
               className="ui-input px-3 py-2 text-sm font-semibold text-slate-700"
             >
-              <option>Table 01</option>
-              <option>Table 02</option>
-              <option>Table 03</option>
-              <option>Table 04</option>
-              <option>Table 05</option>
-              <option>Table 06</option>
+              {allTables.map((table) => (
+                <option key={table.id || table.label} value={table.label}>
+                  {table.label}
+                </option>
+              ))}
             </select>
             <select
               value={orderType}
@@ -719,13 +760,22 @@ export function PosScreen({
               {placeError}
             </p>
           )}
-          <div className="mb-5 space-y-2 text-sm">
-            <PriceRow label="Subtotal" value={subtotal} currency={currency} />
-            <PriceRow label="Tax (10%)" value={tax} currency={currency} />
-            <PriceRow label="Discount" value={discount} tone="green" currency={currency} />
+          <div className="mb-5 space-y-2 text-sm tabular-nums">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-slate-500">Subtotal</p>
+              <p className="font-medium text-slate-700">{formatMoney(subtotal)}</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-slate-500">{taxLabel}</p>
+              <p className="font-medium text-slate-700">{formatMoney(tax)}</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-[#1C8370]">Discount</p>
+              <p className="font-medium text-[#1C8370]">- {formatMoney(discount)}</p>
+            </div>
             <div className="mt-3 flex items-center justify-between border-t border-dashed border-slate-200 pt-3">
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">Total</p>
-              <p className="text-2xl font-black text-slate-900">{formatMoney(total)}</p>
+              <p className="text-sm font-medium text-slate-500">Total</p>
+              <p className="text-2xl font-semibold text-[#2D71F8] tabular-nums">{formatMoney(total)}</p>
             </div>
           </div>
           <div className="mb-4 space-y-2.5">
@@ -740,13 +790,13 @@ export function PosScreen({
               className="ui-btn ui-btn-secondary mb-2 flex w-full items-center justify-center gap-2 px-3 py-2.5 text-sm text-slate-600"
             >
               <Percent size={16} className="text-[#1C8370]" />
-              {discountRate > 0 ? 'Promo On (10%)' : 'Apply Promo'}
+              {discountRate > 0 ? 'Promo 10% On' : 'Apply Promo 10%'}
             </button>
           </div>
           <button
             onClick={openPaymentModal}
             disabled={placingOrder || cart.length === 0}
-            className="ui-btn ui-btn-primary w-full py-3.5 text-base font-bold disabled:bg-slate-300 disabled:shadow-none"
+            className="ui-btn ui-btn-primary w-full py-3.5 text-base font-semibold disabled:bg-slate-300 disabled:shadow-none"
           >
             {placingOrder ? 'Placing Order...' : 'Place Order'}
           </button>
@@ -763,7 +813,23 @@ export function PosScreen({
             if (placingOrder) return
             setPaymentModalOpen(false)
           }}
+          cart={cart}
+          customerName={customerName}
+          tableName={tableName}
+          orderType={orderType}
+          subtotal={subtotal}
+          tax={tax}
+          discount={discount}
           onConfirm={handlePlaceOrder}
+          onNewOrder={(receiptData) => {
+            setCart([])
+            setPaymentModalOpen(false)
+            setPaymentMethod(receiptData?.paymentMethod ?? paymentMethod)
+            setPlaceError('')
+            onAction?.(
+              `Order ${receiptData?.orderNumber ?? ''} placed successfully (${receiptData?.paymentMethod ?? paymentMethod}).`,
+            )
+          }}
         />
       )}
 

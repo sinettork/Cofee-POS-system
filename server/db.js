@@ -121,6 +121,32 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_users_role
     ON users(role);
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS khqr_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bill_number TEXT NOT NULL UNIQUE,
+    md5 TEXT NOT NULL UNIQUE,
+    qr_string TEXT NOT NULL,
+    amount REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    status TEXT NOT NULL DEFAULT 'UNPAID',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    paid_at TEXT,
+    last_checked_at TEXT,
+    check_response_json TEXT NOT NULL DEFAULT ''
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_khqr_transactions_md5
+    ON khqr_transactions(md5);
+
+  CREATE INDEX IF NOT EXISTS idx_khqr_transactions_status
+    ON khqr_transactions(status);
 `)
 
 ensureOrderColumns()
@@ -128,6 +154,7 @@ ensureProductColumns()
 seedIfEmpty()
 ensureOpeningInventoryMovements()
 ensureDefaultUsers()
+ensureDefaultSettings()
 
 function seedIfEmpty() {
   const categoryCount = db.prepare('SELECT COUNT(*) AS count FROM categories').get().count
@@ -505,6 +532,17 @@ export function createProduct(payload) {
   )
 
   return getProductById(nextId)
+}
+
+export function createCategory(payload) {
+  db.prepare(
+    `
+    INSERT INTO categories (id, name)
+    VALUES (?, ?)
+  `,
+  ).run(payload.id, payload.name)
+
+  return db.prepare('SELECT id, name FROM categories WHERE id = ?').get(payload.id)
 }
 
 export function updateProduct(productId, payload) {
@@ -905,6 +943,77 @@ export function updateOrderStatus(orderNumber, status, paymentStatus) {
     )
   }
 
+  if (normalizedStatus === 'Canceled' && currentStatus !== 'Canceled') {
+    const orderRow = db
+      .prepare(
+        `
+        SELECT id
+        FROM orders
+        WHERE order_number = ?
+      `,
+      )
+      .get(orderNumber)
+    if (!orderRow?.id) {
+      throw createDomainError('ORDER_NOT_FOUND', 'Order not found.')
+    }
+
+    const orderItems = db
+      .prepare(
+        `
+        SELECT product_id, product_name, quantity
+        FROM order_items
+        WHERE order_id = ?
+      `,
+      )
+      .all(orderRow.id)
+
+    const findProductStock = db.prepare('SELECT stock_qty FROM products WHERE id = ?')
+    const restoreStock = db.prepare('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?')
+    const insertMovement = db.prepare(`
+      INSERT INTO inventory_movements (
+        product_id, order_id, movement_type, quantity, before_qty, after_qty, note, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    const updateCanceledOrder = db.prepare(`
+      UPDATE orders
+      SET
+        status = ?,
+        payment_status = COALESCE(?, payment_status),
+        kitchen_status = 'Canceled'
+      WHERE order_number = ?
+    `)
+
+    db.exec('BEGIN IMMEDIATE TRANSACTION')
+    try {
+      const now = new Date().toISOString()
+      orderItems.forEach((item) => {
+        const product = findProductStock.get(item.product_id)
+        if (!product) return
+        const beforeQty = Number(product.stock_qty ?? 0)
+        const quantity = Number(item.quantity ?? 0)
+        const afterQty = beforeQty + quantity
+        restoreStock.run(quantity, item.product_id)
+        insertMovement.run(
+          item.product_id,
+          orderRow.id,
+          'adjustment',
+          quantity,
+          beforeQty,
+          afterQty,
+          `Order ${orderNumber} canceled - stock restored (${item.product_name})`,
+          now,
+        )
+      })
+
+      const result = updateCanceledOrder.run('Canceled', normalizedPaymentStatus, orderNumber)
+      db.exec('COMMIT')
+      return result.changes > 0
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   const update = db.prepare(`
     UPDATE orders
     SET
@@ -931,7 +1040,19 @@ export function updateOrderStatus(orderNumber, status, paymentStatus) {
   return result.changes > 0
 }
 
-export function getReportSummary() {
+export function getReportSummary({ from = null, to = null } = {}) {
+  const conditions = []
+  const params = []
+  if (from) {
+    conditions.push('date(created_at) >= date(?)')
+    params.push(from)
+  }
+  if (to) {
+    conditions.push('date(created_at) <= date(?)')
+    params.push(to)
+  }
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
   const metrics = db.prepare(`
     SELECT
       COALESCE(SUM(
@@ -949,7 +1070,8 @@ export function getReportSummary() {
         END
       ), 0) AS netProfit
     FROM orders
-  `).get()
+    ${whereClause}
+  `).get(...params)
 
   return {
     totalSales: Number(metrics.totalSales.toFixed(2)),
@@ -957,6 +1079,97 @@ export function getReportSummary() {
     totalCustomers: metrics.totalCustomers,
     netProfit: Number(metrics.netProfit.toFixed(2)),
   }
+}
+
+export function createKhqrTransaction(payload) {
+  const now = new Date().toISOString()
+  const createdAt = String(payload.createdAt ?? now)
+  db.prepare(
+    `
+    INSERT INTO khqr_transactions (
+      bill_number,
+      md5,
+      qr_string,
+      amount,
+      currency,
+      status,
+      created_at,
+      expires_at,
+      check_response_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+  ).run(
+    String(payload.billNumber),
+    String(payload.md5),
+    String(payload.qrString),
+    Number(payload.amount ?? 0),
+    String(payload.currency ?? 'USD'),
+    String(payload.status ?? 'UNPAID'),
+    createdAt,
+    String(payload.expiresAt),
+    payload.checkResponseJson ? String(payload.checkResponseJson) : '',
+  )
+}
+
+export function getKhqrTransactionByMd5(md5) {
+  const row = db
+    .prepare(
+      `
+      SELECT
+        id,
+        bill_number,
+        md5,
+        qr_string,
+        amount,
+        currency,
+        status,
+        created_at,
+        expires_at,
+        paid_at,
+        last_checked_at,
+        check_response_json
+      FROM khqr_transactions
+      WHERE md5 = ?
+      LIMIT 1
+    `,
+    )
+    .get(String(md5))
+  if (!row) return null
+  return {
+    id: Number(row.id),
+    billNumber: row.bill_number,
+    md5: row.md5,
+    qrString: row.qr_string,
+    amount: Number(row.amount ?? 0),
+    currency: row.currency,
+    status: row.status,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    paidAt: row.paid_at ?? null,
+    lastCheckedAt: row.last_checked_at ?? null,
+    checkResponseJson: row.check_response_json ?? '',
+  }
+}
+
+export function updateKhqrTransactionStatus(md5, payload) {
+  const status = String(payload.status ?? 'UNPAID')
+  const paidAt = payload.paidAt == null ? null : String(payload.paidAt)
+  const lastCheckedAt = payload.lastCheckedAt == null ? null : String(payload.lastCheckedAt)
+  const responseJson = payload.checkResponseJson == null ? '' : String(payload.checkResponseJson)
+  const result = db
+    .prepare(
+      `
+      UPDATE khqr_transactions
+      SET
+        status = ?,
+        paid_at = COALESCE(?, paid_at),
+        last_checked_at = ?,
+        check_response_json = ?
+      WHERE md5 = ?
+    `,
+    )
+    .run(status, paidAt, lastCheckedAt, responseJson, String(md5))
+  return result.changes > 0
 }
 
 function getNextOrderNumber() {
@@ -1020,4 +1233,13 @@ function ensureDefaultUsers() {
       now,
     )
   })
+}
+
+function ensureDefaultSettings() {
+  const currentCount = Number(db.prepare('SELECT COUNT(*) AS count FROM settings').get()?.count ?? 0)
+  if (currentCount > 0) return
+  const insertSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+  insertSetting.run('taxRate', '10')
+  insertSetting.run('receiptFooter', 'true')
+  insertSetting.run('defaultService', 'Dine In')
 }

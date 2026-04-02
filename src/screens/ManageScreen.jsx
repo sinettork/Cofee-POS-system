@@ -12,7 +12,8 @@ import {
   Upload,
   Users,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createUser, fetchSettings, fetchUsers, saveSettings, updateUser } from '../api/client'
 import { HeaderChip } from '../components/common'
 import { formatDate } from '../utils/format'
 
@@ -35,6 +36,7 @@ const PAGE_CONFIG = {
 }
 
 const STORAGE_KEY = 'tenant-pos-manage-v1'
+const ADD_CATEGORY_OPTION = '__add_new_category__'
 
 const DEFAULT_INVENTORY = [
   { label: 'Coffee Beans', value: 42, unit: 'kg', threshold: 20 },
@@ -238,23 +240,38 @@ export function ManageScreen({
   canManageCatalog = true,
   onOpenMenu,
   onAction,
+  onCreateCategory,
   onCreateProduct,
   onUpdateProduct,
   onDeleteProduct,
   onBulkCreateProducts,
+  settingsBootstrap,
+  currentUserRole = '',
+  onSettingsChange,
 }) {
   const config = PAGE_CONFIG[page] ?? PAGE_CONFIG.inventory
   const SectionIcon = config.icon
   const [initialState] = useState(() => getInitialManageState())
-  const [inventory, setInventory] = useState(initialState.inventory)
-  const [teams, setTeams] = useState(initialState.teams)
+  const [inventory] = useState(initialState.inventory)
+  const [teams] = useState(initialState.teams)
   const [settings, setSettings] = useState(initialState.settings)
-  const categoryOptions = categories.filter((item) => item.id !== 'all')
+  const [users, setUsers] = useState([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [usersUpdatingId, setUsersUpdatingId] = useState('')
+  const [newUserDraft, setNewUserDraft] = useState({
+    username: '',
+    displayName: '',
+    role: 'cashier',
+    password: '',
+  })
+  const [sectionError, setSectionError] = useState('')
+  const categoryOptions = useMemo(() => categories.filter((item) => item.id !== 'all'), [categories])
   const [productSearch, setProductSearch] = useState('')
   const [inventoryFilter, setInventoryFilter] = useState('all')
   const [editingProductId, setEditingProductId] = useState('')
   const [productError, setProductError] = useState('')
   const [savingProduct, setSavingProduct] = useState(false)
+  const [creatingCategory, setCreatingCategory] = useState(false)
   const [stockUpdatingId, setStockUpdatingId] = useState('')
   const [importingProducts, setImportingProducts] = useState(false)
   const [movementSearch, setMovementSearch] = useState('')
@@ -270,36 +287,193 @@ export function ManageScreen({
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
   }, [inventory, settings, teams])
 
-  const adjustInventory = (index, delta) => {
-    setInventory((previous) =>
-      previous.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, value: Math.max(0, item.value + delta) } : item,
-      ),
-    )
-  }
+  useEffect(() => {
+    if (!settingsBootstrap) return
+    setSettings((previous) => ({
+      ...previous,
+      taxRate: Number(settingsBootstrap.taxRate ?? previous.taxRate ?? 10),
+      receiptFooter: Boolean(settingsBootstrap.receiptFooter ?? previous.receiptFooter),
+      defaultService: String(settingsBootstrap.defaultService ?? previous.defaultService ?? 'Dine In'),
+    }))
+  }, [settingsBootstrap])
 
-  const adjustTeam = (index, field, delta) => {
-    setTeams((previous) =>
-      previous.map((item, itemIndex) => {
-        if (itemIndex !== index) return item
-        if (field === 'total') {
-          const nextTotal = Math.max(0, item.total + delta)
-          return { ...item, total: nextTotal, onShift: Math.min(item.onShift, nextTotal) }
-        }
-        const nextOnShift = Math.max(0, Math.min(item.total, item.onShift + delta))
-        return { ...item, onShift: nextOnShift }
-      }),
-    )
-  }
+  useEffect(() => {
+    if (page !== 'settings') return
+    const controller = new AbortController()
+    fetchSettings(controller.signal)
+      .then((result) => {
+        setSettings((previous) => ({
+          ...previous,
+          taxRate: Number(result?.taxRate ?? previous.taxRate ?? 10),
+          receiptFooter: String(result?.receiptFooter ?? 'true').toLowerCase() === 'true',
+          defaultService: String(result?.defaultService ?? previous.defaultService ?? 'Dine In'),
+        }))
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [page])
 
-  const saveCurrentSection = () => {
+  useEffect(() => {
+    if (page !== 'teams') return
+    const controller = new AbortController()
+    setSectionError('')
+    setUsersLoading(true)
+    fetchUsers(controller.signal)
+      .then((result) => {
+        setUsers(Array.isArray(result?.users) ? result.users : [])
+      })
+      .catch((error) => {
+        setSectionError(error.message || 'Failed to load users.')
+      })
+      .finally(() => setUsersLoading(false))
+    return () => controller.abort()
+  }, [page])
+
+  useEffect(() => {
+    setSectionError('')
+  }, [page])
+
+  useEffect(() => {
+    if (categoryOptions.length === 0) return
+    const hasCategory = categoryOptions.some((item) => item.id === productDraft.category)
+    if (hasCategory) return
+    setProductDraft((previous) => ({
+      ...previous,
+      category: categoryOptions[0].id,
+    }))
+  }, [categoryOptions, productDraft.category])
+
+  const saveCurrentSection = async () => {
+    setSectionError('')
+    if (page === 'settings') {
+      try {
+        await saveSettings({
+          taxRate: String(settings.taxRate),
+          receiptFooter: String(settings.receiptFooter),
+          defaultService: settings.defaultService,
+        })
+        onSettingsChange?.(settings)
+      } catch (error) {
+        setSectionError(error.message || 'Failed to save settings.')
+        return
+      }
+    }
     onAction?.(`${config.title} saved successfully.`)
   }
+
+  const canCreateUsers = String(currentUserRole).toLowerCase() === 'admin'
+
+  const handleCreateUser = async () => {
+    if (!canCreateUsers) return
+    const username = newUserDraft.username.trim().toLowerCase()
+    const displayName = newUserDraft.displayName.trim()
+    const role = newUserDraft.role.trim().toLowerCase()
+    const password = newUserDraft.password
+    if (!username || !displayName || !role || !password) {
+      setSectionError('All new user fields are required.')
+      return
+    }
+    setSectionError('')
+    try {
+      await createUser({ username, displayName, role, password })
+      const refreshed = await fetchUsers()
+      setUsers(Array.isArray(refreshed?.users) ? refreshed.users : [])
+      setNewUserDraft({ username: '', displayName: '', role: 'cashier', password: '' })
+      onAction?.('User created.')
+    } catch (error) {
+      setSectionError(error.message || 'Failed to create user.')
+    }
+  }
+
+  const handleToggleUserActive = async (user) => {
+    if (!canCreateUsers) return
+    setUsersUpdatingId(String(user.id))
+    setSectionError('')
+    try {
+      await updateUser(user.id, { active: !user.active })
+      setUsers((previous) =>
+        previous.map((item) =>
+          item.id === user.id ? { ...item, active: !item.active } : item,
+        ),
+      )
+      onAction?.(`User ${user.username} updated.`)
+    } catch (error) {
+      setSectionError(error.message || 'Failed to update user.')
+    } finally {
+      setUsersUpdatingId('')
+    }
+  }
+
+  const teamStats = users.length
+    ? [
+        {
+          label: 'Admin',
+          total: users.filter((item) => String(item.role).toLowerCase() === 'admin').length,
+          onShift: users.filter(
+            (item) => String(item.role).toLowerCase() === 'admin' && Boolean(item.active),
+          ).length,
+        },
+        {
+          label: 'Manager',
+          total: users.filter((item) => String(item.role).toLowerCase() === 'manager').length,
+          onShift: users.filter(
+            (item) => String(item.role).toLowerCase() === 'manager' && Boolean(item.active),
+          ).length,
+        },
+        {
+          label: 'Cashier',
+          total: users.filter((item) => String(item.role).toLowerCase() === 'cashier').length,
+          onShift: users.filter(
+            (item) => String(item.role).toLowerCase() === 'cashier' && Boolean(item.active),
+          ).length,
+        },
+      ]
+    : teams
 
   const resetProductForm = () => {
     setEditingProductId('')
     setProductError('')
     setProductDraft(createEmptyProductDraft(categoryOptions[0]?.id ?? 'coffee'))
+  }
+
+  const handleCreateCategoryFromDropdown = async () => {
+    if (!canManageCatalog) return
+    if (!onCreateCategory) {
+      setProductError('Category creation is not available.')
+      return
+    }
+    const categoryNameInput = window.prompt('Enter new category name:')
+    if (categoryNameInput === null) return
+    const name = categoryNameInput.trim()
+    if (!name) {
+      setProductError('Category name is required.')
+      return
+    }
+
+    const existingCategory = categoryOptions.find(
+      (item) => String(item.name).trim().toLowerCase() === name.toLowerCase(),
+    )
+    if (existingCategory) {
+      setProductDraft((previous) => ({ ...previous, category: existingCategory.id }))
+      onAction?.(`Category "${existingCategory.name}" already exists.`)
+      return
+    }
+
+    setCreatingCategory(true)
+    setProductError('')
+    try {
+      const created = await onCreateCategory({ name })
+      if (!created?.id) throw new Error('Category response is invalid.')
+      setProductDraft((previous) => ({
+        ...previous,
+        category: created.id,
+      }))
+      onAction?.(`Category "${created.name}" created.`)
+    } catch (error) {
+      setProductError(error.message || 'Failed to create category.')
+    } finally {
+      setCreatingCategory(false)
+    }
   }
 
   const submitProductForm = async () => {
@@ -320,6 +494,10 @@ export function ManageScreen({
     }
     if (!productDraft.category || productDraft.category === 'all') {
       setProductError('Please select a valid category.')
+      return
+    }
+    if (!categoryOptions.some((item) => item.id === productDraft.category)) {
+      setProductError('Please select an existing category.')
       return
     }
     if (!label) {
@@ -385,16 +563,16 @@ export function ManageScreen({
     }
     setProductError('')
     setEditingProductId(product.id)
-      setProductDraft({
-        name: product.name,
-        category: product.category,
-        label: product.label,
-        basePrice: String(product.basePrice),
-        stockQty: String(product.stockQty ?? 50),
-        stockThreshold: String(product.stockThreshold ?? 10),
-        image: product.image,
-        description: product.description,
-      })
+    setProductDraft({
+      name: product.name,
+      category: product.category,
+      label: product.label,
+      basePrice: String(product.basePrice),
+      stockQty: String(product.stockQty ?? 50),
+      stockThreshold: String(product.stockThreshold ?? 10),
+      image: product.image,
+      description: product.description,
+    })
   }
 
   const handleSelectImageFile = (event) => {
@@ -778,12 +956,12 @@ export function ManageScreen({
                   </article>
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-slate-800">Stock Alerts</h3>
-                    <p className="text-xs text-slate-400">{alertProducts.length} items need attention</p>
-                  </div>
-                  {alertProducts.length > 0 ? (
+                {alertProducts.length > 0 ? (
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-slate-800">Stock Alerts</h3>
+                      <p className="text-xs text-slate-400">{alertProducts.length} items need attention</p>
+                    </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                       {alertProducts.map((item) => (
                         <article
@@ -819,12 +997,16 @@ export function ManageScreen({
                         </article>
                       ))}
                     </div>
-                  ) : (
-                    <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                      All stock levels are healthy.
-                    </p>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2">
+                    <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                      <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                      All stock healthy
+                    </div>
+                    <p className="text-xs text-emerald-700/80">No items need attention</p>
+                  </div>
+                )}
 
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
@@ -946,7 +1128,7 @@ export function ManageScreen({
                         </button>
                       )}
                     </div>
-                    <fieldset className="space-y-2 disabled:opacity-70" disabled={!canManageCatalog}>
+                    <fieldset className="space-y-2 disabled:opacity-70" disabled={!canManageCatalog || creatingCategory}>
                       <input
                         value={productDraft.name}
                         onChange={(event) =>
@@ -957,20 +1139,35 @@ export function ManageScreen({
                       />
                       <div className="grid grid-cols-2 gap-2">
                         <select
-                          value={productDraft.category}
-                          onChange={(event) =>
+                          value={
+                            categoryOptions.some((item) => item.id === productDraft.category)
+                              ? productDraft.category
+                              : ''
+                          }
+                          onChange={(event) => {
+                            const nextCategory = event.target.value
+                            if (nextCategory === ADD_CATEGORY_OPTION) {
+                              void handleCreateCategoryFromDropdown()
+                              return
+                            }
                             setProductDraft((previous) => ({
                               ...previous,
-                              category: event.target.value,
+                              category: nextCategory,
                             }))
-                          }
+                          }}
                           className="ui-input px-3 py-2 text-sm"
                         >
+                          {categoryOptions.length === 0 && (
+                            <option value="" disabled>
+                              No category available
+                            </option>
+                          )}
                           {categoryOptions.map((item) => (
                             <option key={item.id} value={item.id}>
                               {item.name}
                             </option>
                           ))}
+                          <option value={ADD_CATEGORY_OPTION}>+ Add new category...</option>
                         </select>
                         <input
                           value={productDraft.label}
@@ -1246,50 +1443,103 @@ export function ManageScreen({
             )}
 
             {page === 'teams' && (
-              <div className="grid gap-3 md:grid-cols-3">
-                {teams.map((item, index) => (
+              <div className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {teamStats.map((item) => (
                   <article key={item.label} className="rounded-xl border border-slate-200 bg-white p-4">
                     <p className="text-sm text-slate-500">{item.label}</p>
                     <p className="mt-2 text-2xl font-bold text-slate-900">{item.total} Staff</p>
                     <p className="mt-1 text-xs text-slate-400">{item.onShift} on shift now</p>
-                    <div className="mt-3 space-y-2 text-xs">
-                      <div className="flex items-center justify-between rounded-lg border border-slate-200 px-2 py-1.5">
-                        <span className="text-slate-500">Total</span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => adjustTeam(index, 'total', -1)}
-                            className="ui-btn ui-btn-ghost rounded-md px-2 py-0.5 text-slate-600"
-                          >
-                            -
-                          </button>
-                          <button
-                            onClick={() => adjustTeam(index, 'total', 1)}
-                            className="ui-btn ui-btn-ghost rounded-md px-2 py-0.5 text-slate-600"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between rounded-lg border border-slate-200 px-2 py-1.5">
-                        <span className="text-slate-500">On Shift</span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => adjustTeam(index, 'onShift', -1)}
-                            className="ui-btn ui-btn-ghost rounded-md px-2 py-0.5 text-slate-600"
-                          >
-                            -
-                          </button>
-                          <button
-                            onClick={() => adjustTeam(index, 'onShift', 1)}
-                            className="ui-btn ui-btn-ghost rounded-md px-2 py-0.5 text-slate-600"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    </div>
                   </article>
-                ))}
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-800">User Management</p>
+                    {usersLoading && <p className="text-xs text-slate-400">Loading users...</p>}
+                  </div>
+                  {canCreateUsers && (
+                    <div className="mb-4 grid gap-2 md:grid-cols-4">
+                      <input
+                        value={newUserDraft.username}
+                        onChange={(event) =>
+                          setNewUserDraft((previous) => ({ ...previous, username: event.target.value }))
+                        }
+                        placeholder="username"
+                        className="ui-input px-3 py-2 text-sm"
+                      />
+                      <input
+                        value={newUserDraft.displayName}
+                        onChange={(event) =>
+                          setNewUserDraft((previous) => ({ ...previous, displayName: event.target.value }))
+                        }
+                        placeholder="display name"
+                        className="ui-input px-3 py-2 text-sm"
+                      />
+                      <select
+                        value={newUserDraft.role}
+                        onChange={(event) =>
+                          setNewUserDraft((previous) => ({ ...previous, role: event.target.value }))
+                        }
+                        className="ui-input px-3 py-2 text-sm"
+                      >
+                        <option value="cashier">cashier</option>
+                        <option value="manager">manager</option>
+                        <option value="admin">admin</option>
+                      </select>
+                      <input
+                        type="password"
+                        value={newUserDraft.password}
+                        onChange={(event) =>
+                          setNewUserDraft((previous) => ({ ...previous, password: event.target.value }))
+                        }
+                        placeholder="password"
+                        className="ui-input px-3 py-2 text-sm"
+                      />
+                      <button
+                        onClick={handleCreateUser}
+                        className="ui-btn ui-btn-primary md:col-span-4 px-3 py-2 text-sm"
+                      >
+                        Create User
+                      </button>
+                    </div>
+                  )}
+                  <div className="max-h-[280px] overflow-y-auto rounded-lg border border-slate-100">
+                    <div className="grid grid-cols-[70px_1fr_1fr_110px_90px] gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <p>ID</p>
+                      <p>Username</p>
+                      <p>Name</p>
+                      <p>Role</p>
+                      <p>Status</p>
+                    </div>
+                    {users.map((user) => (
+                      <div
+                        key={user.id}
+                        className="grid grid-cols-[70px_1fr_1fr_110px_90px] gap-2 border-b border-slate-100 px-3 py-2 text-sm text-slate-700"
+                      >
+                        <p>{user.id}</p>
+                        <p>{user.username}</p>
+                        <p>{user.displayName}</p>
+                        <p className="capitalize">{user.role}</p>
+                        <button
+                          onClick={() => handleToggleUserActive(user)}
+                          disabled={!canCreateUsers || usersUpdatingId === String(user.id)}
+                          className={`ui-btn rounded-md px-2 py-1 text-xs ${
+                            user.active
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-200 bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {user.active ? 'Active' : 'Disabled'}
+                        </button>
+                      </div>
+                    ))}
+                    {users.length === 0 && !usersLoading && (
+                      <div className="px-3 py-3 text-sm text-slate-400">No users found.</div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1346,6 +1596,12 @@ export function ManageScreen({
                   </button>
                 </label>
               </div>
+            )}
+
+            {sectionError && (
+              <p className="mt-4 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm font-medium text-[#FC4A4A]">
+                {sectionError}
+              </p>
             )}
 
             <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">
