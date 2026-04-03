@@ -16,9 +16,9 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createUser, fetchSettings, fetchUsers, saveSettings, updateUser } from '../api/client'
+import { createUser, fetchSettings, fetchUsers, saveSettings, updateUser } from '@shared/api/client'
 import { HeaderChip } from '../components/common'
-import { formatDate } from '../utils/format'
+import { formatDate } from '@shared/utils/format'
 
 const PAGE_CONFIG = {
   inventory: {
@@ -909,7 +909,7 @@ export function ManageScreen({
   }
 
   return (
-    <div className="grid h-screen w-full grid-cols-1 overflow-hidden">
+    <div className="grid min-h-[100dvh] w-full grid-cols-1 overflow-hidden">
       <div className="flex min-h-0 h-full flex-col overflow-hidden bg-white">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-4 md:px-6">
           <div className="flex items-center gap-2">
@@ -1079,62 +1079,64 @@ export function ManageScreen({
                       ))}
                     </div>
                   </div>
-                  <div className="max-h-[320px] overflow-y-auto rounded-xl border border-slate-100 shadow-inner">
-                    <div className="sticky top-0 z-10 grid grid-cols-[1.2fr_80px_80px_1fr_1fr] gap-2 border-b border-slate-200 bg-slate-50/90 px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 backdrop-blur-sm">
-                      <p>Product</p>
-                      <p>Type</p>
-                      <p>Qty</p>
-                      <p>Stock Level</p>
-                      <p>Date & Time</p>
-                    </div>
-                    {filteredInventoryMovements.map((movement) => {
-                      const isSale = movement.movementType === 'sale'
-                      const isOpening = movement.movementType === 'opening'
-                      const isNegative = Number(movement.quantity ?? 0) < 0
-                      return (
-                        <div
-                          key={`movement-${movement.id}`}
-                          className="grid grid-cols-[1.2fr_80px_80px_1fr_1fr] items-center gap-2 border-b border-slate-50 px-3 py-3 text-sm transition-colors hover:bg-slate-50/50"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-bold text-slate-800">{movement.productName}</p>
-                            <p className="truncate text-[11px] text-slate-500">
-                              {movement.orderNumber ? `Order #${movement.orderNumber}` : movement.note || 'Manual Adjustment'}
+                  <div className="overflow-x-auto">
+                    <div className="max-h-[320px] min-w-[680px] overflow-y-auto rounded-xl border border-slate-100 shadow-inner">
+                      <div className="sticky top-0 z-10 grid grid-cols-[1.2fr_80px_80px_1fr_1fr] gap-2 border-b border-slate-200 bg-slate-50/90 px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 backdrop-blur-sm">
+                        <p>Product</p>
+                        <p>Type</p>
+                        <p>Qty</p>
+                        <p>Stock Level</p>
+                        <p>Date & Time</p>
+                      </div>
+                      {filteredInventoryMovements.map((movement) => {
+                        const isSale = movement.movementType === 'sale'
+                        const isOpening = movement.movementType === 'opening'
+                        const isNegative = Number(movement.quantity ?? 0) < 0
+                        return (
+                          <div
+                            key={`movement-${movement.id}`}
+                            className="grid grid-cols-[1.2fr_80px_80px_1fr_1fr] items-center gap-2 border-b border-slate-50 px-3 py-3 text-sm transition-colors hover:bg-slate-50/50"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-bold text-slate-800">{movement.productName}</p>
+                              <p className="truncate text-[11px] text-slate-500">
+                                {movement.orderNumber ? `Order #${movement.orderNumber}` : movement.note || 'Manual Adjustment'}
+                              </p>
+                            </div>
+                            <div>
+                              <span
+                                  className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                  isSale
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                    : isOpening
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}
+                              >
+                                {isSale ? 'Sale' : isOpening ? 'Initial' : 'Adjust'}
+                              </span>
+                            </div>
+                            <p className={`font-bold ${isNegative ? 'text-rose-500' : 'text-emerald-600'}`}>
+                              {formatSignedQuantity(movement.quantity)}
+                            </p>
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                              <span className="font-medium">{Number(movement.beforeQty ?? 0)}</span>
+                              <ArrowRight size={10} className="text-slate-300" />
+                              <span className="font-bold text-slate-700">{Number(movement.afterQty ?? 0)}</span>
+                            </div>
+                            <p className="text-[11px] font-medium text-slate-400">
+                              {formatMovementTimestamp(movement.createdAt)}
                             </p>
                           </div>
-                          <div>
-                            <span
-                                className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                                isSale
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                  : isOpening
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
-                              }`}
-                            >
-                              {isSale ? 'Sale' : isOpening ? 'Initial' : 'Adjust'}
-                            </span>
-                          </div>
-                          <p className={`font-bold ${isNegative ? 'text-rose-500' : 'text-emerald-600'}`}>
-                            {formatSignedQuantity(movement.quantity)}
-                          </p>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                            <span className="font-medium">{Number(movement.beforeQty ?? 0)}</span>
-                            <ArrowRight size={10} className="text-slate-300" />
-                            <span className="font-bold text-slate-700">{Number(movement.afterQty ?? 0)}</span>
-                          </div>
-                          <p className="text-[11px] font-medium text-slate-400">
-                            {formatMovementTimestamp(movement.createdAt)}
-                          </p>
+                        )
+                      })}
+                      {filteredInventoryMovements.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                          <CalendarDays size={32} className="mb-2 opacity-20" />
+                          <p className="text-sm">No stock movement recorded yet.</p>
                         </div>
-                      )
-                    })}
-                    {filteredInventoryMovements.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                        <CalendarDays size={32} className="mb-2 opacity-20" />
-                        <p className="text-sm">No stock movement recorded yet.</p>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1256,7 +1258,7 @@ export function ManageScreen({
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
                         <input
                           value={productDraft.image}
                           onChange={(event) =>
@@ -1329,7 +1331,7 @@ export function ManageScreen({
                       <h3 className="text-sm font-semibold text-slate-800">
                         Product Catalog ({filteredInventoryProducts.length})
                       </h3>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           onClick={() => handleExportProducts('csv')}
                           disabled={!canManageCatalog}
@@ -1361,7 +1363,7 @@ export function ManageScreen({
                           onChange={handleImportProducts}
                           className="hidden"
                         />
-                        <label className="relative w-[230px]">
+                        <label className="relative w-full sm:w-[230px]">
                           <Search
                             size={15}
                             className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1394,79 +1396,81 @@ export function ManageScreen({
                         </div>
                       </div>
                     </div>
-                    <div className="max-h-[640px] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-                      <div className="sticky top-0 z-10 grid grid-cols-[80px_1fr_100px_100px_100px_100px] gap-4 border-b border-slate-200 bg-slate-50/90 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 backdrop-blur-sm">
-                        <p>Image</p>
-                        <p>Product Details</p>
-                        <p className="text-center">Price</p>
-                        <p className="text-center">Stock</p>
-                        <p className="text-center">Status</p>
-                        <p className="text-right">Actions</p>
-                      </div>
-                      {filteredInventoryProducts.map((item) => {
-                        const qty = Number(item.stockQty ?? 50)
-                        const threshold = Number(item.stockThreshold ?? 10)
-                        const isOut = qty <= 0
-                        const isLow = qty > 0 && qty <= threshold
-                        return (
-                          <div
-                            key={item.id}
-                            className="grid grid-cols-[80px_1fr_100px_100px_100px_100px] items-center gap-4 border-b border-slate-50 px-4 py-4 text-sm transition-colors hover:bg-slate-50/50"
-                          >
-                            <div className="h-14 w-14 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
-                              <img
-                                src={item.image}
-                                alt={item.name}
-                                className="h-full w-full object-cover transition-transform hover:scale-110"
-                                onError={(e) => { e.target.src = 'https://placehold.co/100x100?text=No+Image'; }}
-                              />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="truncate font-bold text-slate-800">{item.name}</p>
-                              <p className="truncate text-[11px] font-medium text-slate-400 uppercase tracking-tight">{item.category}</p>
-                              {item.label && item.label !== item.name && (
-                                <p className="truncate text-[10px] italic text-slate-400">"{item.label}"</p>
-                              )}
-                            </div>
-                            <p className="text-center font-bold text-slate-700">${Number(item.basePrice).toFixed(2)}</p>
-                            <p className={`text-center font-black ${isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-700'}`}>
-                              {qty}
-                            </p>
-                            <div className="flex justify-center">
-                              <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
-                                isOut ? 'bg-rose-50 text-rose-600 border-rose-100' : 
-                                isLow ? 'bg-amber-50 text-amber-600 border-amber-100' : 
-                                'bg-emerald-50 text-emerald-600 border-emerald-100'
-                              }`}>
-                                {isOut ? 'Out' : isLow ? 'Low' : 'Healthy'}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => startEditProduct(item)}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-[var(--ui-primary)] transition-all"
-                                title="Edit Product"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                onClick={() => removeProduct(item)}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all"
-                                title="Delete Product"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                      {filteredInventoryProducts.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                          <Package size={48} className="mb-4 opacity-10" />
-                          <p className="text-lg font-bold">No products found</p>
-                          <p className="text-sm">Try adjusting your search or filters.</p>
+                    <div className="overflow-x-auto">
+                      <div className="max-h-[640px] min-w-[860px] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <div className="sticky top-0 z-10 grid grid-cols-[80px_1fr_100px_100px_100px_100px] gap-4 border-b border-slate-200 bg-slate-50/90 px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 backdrop-blur-sm">
+                          <p>Image</p>
+                          <p>Product Details</p>
+                          <p className="text-center">Price</p>
+                          <p className="text-center">Stock</p>
+                          <p className="text-center">Status</p>
+                          <p className="text-right">Actions</p>
                         </div>
-                      )}
+                        {filteredInventoryProducts.map((item) => {
+                          const qty = Number(item.stockQty ?? 50)
+                          const threshold = Number(item.stockThreshold ?? 10)
+                          const isOut = qty <= 0
+                          const isLow = qty > 0 && qty <= threshold
+                          return (
+                            <div
+                              key={item.id}
+                              className="grid grid-cols-[80px_1fr_100px_100px_100px_100px] items-center gap-4 border-b border-slate-50 px-4 py-4 text-sm transition-colors hover:bg-slate-50/50"
+                            >
+                              <div className="h-14 w-14 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                                <img
+                                  src={item.image}
+                                  alt={item.name}
+                                  className="h-full w-full object-cover transition-transform hover:scale-110"
+                                  onError={(e) => { e.target.src = 'https://placehold.co/100x100?text=No+Image'; }}
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate font-bold text-slate-800">{item.name}</p>
+                                <p className="truncate text-[11px] font-medium text-slate-400 uppercase tracking-tight">{item.category}</p>
+                                {item.label && item.label !== item.name && (
+                                  <p className="truncate text-[10px] italic text-slate-400">"{item.label}"</p>
+                                )}
+                              </div>
+                              <p className="text-center font-bold text-slate-700">${Number(item.basePrice).toFixed(2)}</p>
+                              <p className={`text-center font-black ${isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-700'}`}>
+                                {qty}
+                              </p>
+                              <div className="flex justify-center">
+                                <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
+                                  isOut ? 'bg-rose-50 text-rose-600 border-rose-100' : 
+                                  isLow ? 'bg-amber-50 text-amber-600 border-amber-100' : 
+                                  'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                }`}>
+                                  {isOut ? 'Out' : isLow ? 'Low' : 'Healthy'}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => startEditProduct(item)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-[var(--ui-primary)] transition-all"
+                                  title="Edit Product"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button
+                                  onClick={() => removeProduct(item)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all"
+                                  title="Delete Product"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {filteredInventoryProducts.length === 0 && (
+                          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                            <Package size={48} className="mb-4 opacity-10" />
+                            <p className="text-lg font-bold">No products found</p>
+                            <p className="text-sm">Try adjusting your search or filters.</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </section>
                 </div>
@@ -1536,39 +1540,41 @@ export function ManageScreen({
                       </button>
                     </div>
                   )}
-                  <div className="max-h-[280px] overflow-y-auto rounded-lg border border-slate-100">
-                    <div className="grid grid-cols-[70px_1fr_1fr_110px_90px] gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <p>ID</p>
-                      <p>Username</p>
-                      <p>Name</p>
-                      <p>Role</p>
-                      <p>Status</p>
-                    </div>
-                    {users.map((user) => (
-                      <div
-                        key={user.id}
-                        className="grid grid-cols-[70px_1fr_1fr_110px_90px] gap-2 border-b border-slate-100 px-3 py-2 text-sm text-slate-700"
-                      >
-                        <p>{user.id}</p>
-                        <p>{user.username}</p>
-                        <p>{user.displayName}</p>
-                        <p className="capitalize">{user.role}</p>
-                        <button
-                          onClick={() => handleToggleUserActive(user)}
-                          disabled={!canCreateUsers || usersUpdatingId === String(user.id)}
-                          className={`ui-btn rounded-md px-2 py-1 text-xs ${
-                            user.active
-                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                              : 'border-slate-200 bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {user.active ? 'Active' : 'Disabled'}
-                        </button>
+                  <div className="overflow-x-auto">
+                    <div className="max-h-[280px] min-w-[560px] overflow-y-auto rounded-lg border border-slate-100">
+                      <div className="grid grid-cols-[70px_1fr_1fr_110px_90px] gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <p>ID</p>
+                        <p>Username</p>
+                        <p>Name</p>
+                        <p>Role</p>
+                        <p>Status</p>
                       </div>
-                    ))}
-                    {users.length === 0 && !usersLoading && (
-                      <div className="px-3 py-3 text-sm text-slate-400">No users found.</div>
-                    )}
+                      {users.map((user) => (
+                        <div
+                          key={user.id}
+                          className="grid grid-cols-[70px_1fr_1fr_110px_90px] gap-2 border-b border-slate-100 px-3 py-2 text-sm text-slate-700"
+                        >
+                          <p>{user.id}</p>
+                          <p>{user.username}</p>
+                          <p>{user.displayName}</p>
+                          <p className="capitalize">{user.role}</p>
+                          <button
+                            onClick={() => handleToggleUserActive(user)}
+                            disabled={!canCreateUsers || usersUpdatingId === String(user.id)}
+                            className={`ui-btn rounded-md px-2 py-1 text-xs ${
+                              user.active
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {user.active ? 'Active' : 'Disabled'}
+                          </button>
+                        </div>
+                      ))}
+                      {users.length === 0 && !usersLoading && (
+                        <div className="px-3 py-3 text-sm text-slate-400">No users found.</div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

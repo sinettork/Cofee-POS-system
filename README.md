@@ -13,8 +13,11 @@ SQLite database:
 
 Core folders:
 
-- `src/` frontend app
-- `src/constants/` shared UI constants/static datasets
+- `src/app/` app shell and route entry (`main.jsx`, root router)
+- `src/Website/` customer-facing website and checkout flows
+- `src/POS/` staff POS domain (screens, components, constants)
+- `src/AdminPanel/` web admin domain (dashboard, users, settings, catalog)
+- `src/shared/` shared frontend API client, utilities, and shared components
 - `server/` backend API
 - `server/database/` SQLite access + seed data
 - `server/routes/` isolated route helper modules
@@ -38,6 +41,7 @@ npm run dev:all
 3. Open:
 - Official website: `http://localhost:5173`
 - POS application: `http://localhost:5173/pos`
+- Admin panel: `http://localhost:5173/admin`
 - API health: `http://localhost:4000/api/health`
 - Online ordering page: `http://localhost:5173/order`
 
@@ -116,6 +120,7 @@ Example payload:
 - `/` official website (customer-facing)
 - `/order` online ordering page
 - `/pos` POS system (staff login)
+- `/admin` admin panel (web-focused management)
 - `/online` alias of `/order`
 
 ## Stock Alert UX

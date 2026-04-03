@@ -12,7 +12,7 @@ export function LoginScreen({ loading = false, error = '', onSubmit }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#eaf2ff_0%,#f7faff_38%,#ffffff_78%)] p-4">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-[radial-gradient(circle_at_top,#eaf2ff_0%,#f7faff_38%,#ffffff_78%)] p-4">
       <section className="ui-surface w-full max-w-[420px] rounded-3xl border-slate-200 p-6 md:p-7">
         <div className="mb-5 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#2D71F8]/10 text-[#2D71F8]">

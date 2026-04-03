@@ -1,6 +1,6 @@
 import { CheckCircle2, Minus, Plus, X } from 'lucide-react'
 import { useState } from 'react'
-import { formatCurrency } from '../utils/format'
+import { formatCurrency } from '@shared/utils/format'
 
 export function ProductModal({
   product,

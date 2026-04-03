@@ -10,10 +10,10 @@ import {
   Search,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { fetchReportSummary } from '../api/client'
+import { fetchReportSummary } from '@shared/api/client'
 import { HeaderChip, MetricCard, MiniMetric } from '../components/common'
 import { FAVORITES, REPORT_ORDER_ROWS } from '../constants/uiData'
-import { formatCurrency, formatDate } from '../utils/format'
+import { formatCurrency, formatDate } from '@shared/utils/format'
 
 export function ReportScreen({
   now,
@@ -150,7 +150,7 @@ export function ReportScreen({
   }
 
   return (
-    <div className="grid h-screen w-full grid-cols-1 overflow-hidden">
+    <div className="grid min-h-[100dvh] w-full grid-cols-1 overflow-hidden">
       <div className="flex min-h-0 h-full flex-col overflow-hidden bg-white">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 md:px-6">
           <div className="flex items-center gap-2">
@@ -185,7 +185,7 @@ export function ReportScreen({
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="mb-4 flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <span className="font-medium text-slate-700">Date Period:</span>
               <button
@@ -220,13 +220,13 @@ export function ReportScreen({
               type="date"
               value={dateFrom}
               onChange={(event) => setDateFrom(event.target.value)}
-              className="ui-input w-[168px] px-2.5 py-1.5 text-xs"
+              className="ui-input w-full sm:w-[168px] px-2.5 py-1.5 text-xs"
             />
             <input
               type="date"
               value={dateTo}
               onChange={(event) => setDateTo(event.target.value)}
-              className="ui-input w-[168px] px-2.5 py-1.5 text-xs"
+              className="ui-input w-full sm:w-[168px] px-2.5 py-1.5 text-xs"
             />
           </div>
 
@@ -367,37 +367,41 @@ export function ReportScreen({
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <p>#</p>
-              <p>Date & Time</p>
-              <p>Customer Name</p>
-              <p>Order Status</p>
-              <p>Total Payment</p>
-              <p>Payment Status ({paymentFilter})</p>
-              <p>Orders</p>
-            </div>
-            <div className="max-h-[280px] overflow-y-auto">
-              {filteredOrderRows.map((row) => (
-                <div
-                  key={row.id + row.customer}
-                  className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 border-t border-slate-100 px-3 py-3 text-sm text-slate-700"
-                >
-                  <p>{row.id}</p>
-                  <p>{row.date}</p>
-                  <p>{row.customer}</p>
-                  <p>{row.state}</p>
-                  <p>{formatCurrency(row.payment, row.currency ?? 'USD')}</p>
-                  <p className={row.paymentState === 'Paid' ? 'text-[#1C8370]' : 'text-[#FC4A4A]'}>
-                    {row.paymentState}
-                  </p>
-                  <button onClick={() => setDetailRow(row)} className="text-[#2D71F8] hover:underline">
-                    Detail
-                  </button>
+            <div className="overflow-x-auto">
+              <div className="min-w-[800px]">
+                <div className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <p>#</p>
+                  <p>Date & Time</p>
+                  <p>Customer Name</p>
+                  <p>Order Status</p>
+                  <p>Total Payment</p>
+                  <p>Payment Status ({paymentFilter})</p>
+                  <p>Orders</p>
                 </div>
-              ))}
-              {filteredOrderRows.length === 0 && (
-                <div className="px-3 py-4 text-sm text-slate-400">No orders found for this payment filter.</div>
-              )}
+                <div className="max-h-[280px] overflow-y-auto">
+                  {filteredOrderRows.map((row) => (
+                    <div
+                      key={row.id + row.customer}
+                      className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 border-t border-slate-100 px-3 py-3 text-sm text-slate-700"
+                    >
+                      <p>{row.id}</p>
+                      <p>{row.date}</p>
+                      <p>{row.customer}</p>
+                      <p>{row.state}</p>
+                      <p>{formatCurrency(row.payment, row.currency ?? 'USD')}</p>
+                      <p className={row.paymentState === 'Paid' ? 'text-[#1C8370]' : 'text-[#FC4A4A]'}>
+                        {row.paymentState}
+                      </p>
+                      <button onClick={() => setDetailRow(row)} className="text-[#2D71F8] hover:underline">
+                        Detail
+                      </button>
+                    </div>
+                  ))}
+                  {filteredOrderRows.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-slate-400">No orders found for this payment filter.</div>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
         </div>

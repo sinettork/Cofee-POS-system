@@ -1,9 +1,9 @@
 import { ArrowUpRight, CalendarDays, Loader2, Menu, Power, Search, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { createTable, fetchOrderDetail, updateTableStatus } from '../api/client'
+import { createTable, fetchOrderDetail, updateTableStatus } from '@shared/api/client'
 import { HeaderChip, StatusDot } from '../components/common'
 import { BILLING_QUEUE, HISTORY_ROWS, TABLE_GROUPS, TRACKING_ORDERS } from '../constants/uiData'
-import { formatCurrency, formatDate } from '../utils/format'
+import { formatCurrency, formatDate } from '@shared/utils/format'
 
 export function ActivityScreen({
   now,
@@ -174,8 +174,8 @@ export function ActivityScreen({
   }
 
   return (
-    <div className="grid h-screen w-full grid-cols-1 overflow-hidden">
-      <div className="grid min-h-0 h-full grid-cols-1 overflow-hidden bg-white lg:grid-cols-[240px_1fr]">
+    <div className="grid min-h-[100dvh] w-full grid-cols-1 overflow-hidden">
+      <div className="grid min-h-0 grid-cols-1 overflow-hidden bg-white lg:h-full lg:grid-cols-[240px_1fr]">
         <aside className="border-r border-slate-100 bg-slate-50/60 p-4">
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -522,37 +522,41 @@ export function ActivityScreen({
 
             {tab === 'history' && (
               <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
-                <div className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 border-b border-stone-100 bg-stone-50 px-3 py-4 text-[10px] font-bold uppercase tracking-widest text-stone-500">
-                  <p>#</p>
-                  <p>Date & Time</p>
-                  <p>Customer Name</p>
-                  <p>Order Status</p>
-                  <p>Total Payment</p>
-                  <p>Payment Status</p>
-                  <p>Orders</p>
-                </div>
-                <div className="max-h-[560px] overflow-y-auto divide-y divide-stone-50">
-                  {filteredHistoryRows.map((row) => (
-                    <div
-                      key={row.id + row.at}
-                      className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 px-3 py-4 text-sm text-stone-700 transition-colors hover:bg-stone-50/50"
-                    >
-                      <p className="font-bold">{row.id}</p>
-                      <p className="font-medium">{row.at}</p>
-                      <p className="font-bold">{row.customer}</p>
-                      <p className="font-bold uppercase tracking-wider text-[11px] text-stone-500">{row.status}</p>
-                      <p className="font-black text-stone-900">{formatCurrency(row.payment, row.currency ?? 'USD')}</p>
-                      <p className={`font-bold uppercase tracking-widest text-[11px] ${row.paid ? 'text-[#1C8370]' : 'text-red-500'}`}>
-                        {row.paid ? 'Paid' : 'Unpaid'}
-                      </p>
-                      <button
-                        onClick={() => openDetail('history', row)}
-                        className="text-[#7c4a32] font-bold hover:underline"
-                      >
-                        Detail
-                      </button>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[760px]">
+                    <div className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 border-b border-stone-100 bg-stone-50 px-3 py-4 text-[10px] font-bold uppercase tracking-widest text-stone-500">
+                      <p>#</p>
+                      <p>Date & Time</p>
+                      <p>Customer Name</p>
+                      <p>Order Status</p>
+                      <p>Total Payment</p>
+                      <p>Payment Status</p>
+                      <p>Orders</p>
                     </div>
-                  ))}
+                    <div className="max-h-[560px] overflow-y-auto divide-y divide-stone-50">
+                      {filteredHistoryRows.map((row) => (
+                        <div
+                          key={row.id + row.at}
+                          className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 px-3 py-4 text-sm text-stone-700 transition-colors hover:bg-stone-50/50"
+                        >
+                          <p className="font-bold">{row.id}</p>
+                          <p className="font-medium">{row.at}</p>
+                          <p className="font-bold">{row.customer}</p>
+                          <p className="font-bold uppercase tracking-wider text-[11px] text-stone-500">{row.status}</p>
+                          <p className="font-black text-stone-900">{formatCurrency(row.payment, row.currency ?? 'USD')}</p>
+                          <p className={`font-bold uppercase tracking-widest text-[11px] ${row.paid ? 'text-[#1C8370]' : 'text-red-500'}`}>
+                            {row.paid ? 'Paid' : 'Unpaid'}
+                          </p>
+                          <button
+                            onClick={() => openDetail('history', row)}
+                            className="text-[#7c4a32] font-bold hover:underline"
+                          >
+                            Detail
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { formatCurrency } from '../utils/format'
+import { formatCurrency } from '@shared/utils/format'
 
 export function RailButton({ icon, active, onClick }) {
   return (

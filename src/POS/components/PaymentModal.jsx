@@ -1,8 +1,8 @@
 import { Banknote, CheckCircle2, CreditCard, Loader2, QrCode, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchKhqrStatus, generateKhqr } from '../api/client'
-import { formatCurrency } from '../utils/format'
-import KHQRCard from './KHQRCard'
+import { fetchKhqrStatus, generateKhqr } from '@shared/api/client'
+import KHQRCard from '@shared/components/KHQRCard'
+import { formatCurrency } from '@shared/utils/format'
 import { ReceiptView } from './ReceiptView'
 
 const METHODS = [

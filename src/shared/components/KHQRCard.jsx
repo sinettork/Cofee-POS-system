@@ -1,4 +1,4 @@
-import KHQRLogo from '../assets/KHQR.svg'
+import KHQRLogo from '@assets/KHQR.svg'
 import { QRCodeSVG } from 'qrcode.react'
 
 export function KHQRCard({

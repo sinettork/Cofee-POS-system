@@ -19,7 +19,7 @@ import { PaymentModal } from '../components/PaymentModal'
 import { ProductModal } from '../components/ProductModal'
 import { HeaderChip, RailButton } from '../components/common'
 import { CATEGORY_ITEMS, PAGE_ITEMS, PRODUCT_ITEMS, TRACKING_ORDERS } from '../constants/uiData'
-import { formatCurrency, formatDate, formatTime } from '../utils/format'
+import { formatCurrency, formatDate, formatTime } from '@shared/utils/format'
 
 const DEFAULT_CURRENCY = 'USD'
 
@@ -373,7 +373,7 @@ export function PosScreen({
   }
 
   return (
-    <div className="grid h-screen w-full grid-cols-1 gap-3 overflow-hidden bg-white p-3 md:p-4 xl:grid-cols-[74px_1fr_380px]">
+    <div className="grid min-h-[100dvh] w-full grid-cols-1 gap-3 overflow-x-hidden bg-white p-3 md:p-4 xl:grid-cols-[74px_minmax(0,1fr)_380px] xl:overflow-hidden">
       <aside className="ui-surface hidden rounded-[24px] p-3 xl:flex xl:flex-col xl:items-center xl:justify-between">
         <div className="flex w-full flex-col items-center gap-5">
           <button onClick={onOpenMenu} className="ui-btn ui-btn-primary mt-1 h-11 w-11 rounded-full p-0 shadow-lg shadow-amber-900/10">
@@ -425,7 +425,7 @@ export function PosScreen({
                   )}
                 </button>
                 {stockAlertOpen && (
-                  <div className="ui-surface absolute right-0 top-[calc(100%+8px)] z-20 w-[290px] rounded-xl border-stone-200 bg-white p-3 shadow-xl">
+                  <div className="ui-surface absolute right-0 top-[calc(100%+8px)] z-20 w-[min(290px,calc(100vw-2rem))] rounded-xl border-stone-200 bg-white p-3 shadow-xl">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-sm font-semibold text-stone-900">Stock Alerts</p>
                       <span className="text-xs text-stone-400">{stockAlertCount} items</span>
@@ -731,7 +731,7 @@ export function PosScreen({
                 className="ui-input h-11 px-4 py-2 text-sm font-bold text-stone-800 placeholder:text-stone-300 border-stone-200 focus:border-[#7c4a32] focus:ring-4 focus:ring-amber-900/5"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="relative">
                 <select
                   value={tableName}

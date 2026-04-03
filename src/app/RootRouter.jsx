@@ -1,8 +1,9 @@
 import { Component, useEffect, useState } from 'react'
-import App from './App.jsx'
-import { CustomerAuthScreen } from './screens/CustomerAuthScreen.jsx'
-import { OfficialWebsiteScreen } from './screens/OfficialWebsiteScreen.jsx'
-import { OnlineOrderScreen } from './screens/OnlineOrderScreen.jsx'
+import { AdminPanelApp } from '@AdminPanel/AdminPanelApp.jsx'
+import PosApp from '@POS/PosApp.jsx'
+import { CustomerAuthScreen } from '@Website/screens/CustomerAuthScreen.jsx'
+import { OfficialWebsiteScreen } from '@Website/screens/OfficialWebsiteScreen.jsx'
+import { OnlineOrderScreen } from '@Website/screens/OnlineOrderScreen.jsx'
 
 class RootErrorBoundary extends Component {
   constructor(props) {
@@ -32,6 +33,9 @@ class RootErrorBoundary extends Component {
             <a href="/pos" className="ui-btn ui-btn-secondary px-3 py-2 text-sm">
               Open POS
             </a>
+            <a href="/admin" className="ui-btn ui-btn-secondary px-3 py-2 text-sm">
+              Open Admin
+            </a>
           </div>
         </div>
       </div>
@@ -56,6 +60,7 @@ export function RootRouter() {
 
   const isOnlineOrderPage = pathname.startsWith('/order') || pathname.startsWith('/online')
   const isPosPage = pathname.startsWith('/pos')
+  const isAdminPage = pathname.startsWith('/admin')
   const isCheckoutPage = pathname.startsWith('/cart') || pathname.startsWith('/checkout')
   const isCustomerAuthPage = pathname.startsWith('/account') || pathname.startsWith('/customer-login')
 
@@ -65,8 +70,10 @@ export function RootRouter() {
         <CustomerAuthScreen />
       ) : isOnlineOrderPage ? (
         <OnlineOrderScreen />
+      ) : isAdminPage ? (
+        <AdminPanelApp />
       ) : isPosPage ? (
-        <App />
+        <PosApp />
       ) : (
         <OfficialWebsiteScreen checkoutPage={isCheckoutPage} />
       )}

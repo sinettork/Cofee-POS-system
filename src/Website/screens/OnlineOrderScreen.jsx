@@ -10,9 +10,9 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { createPublicOrder, fetchPublicCatalog } from '../api/client'
-import { formatCurrency } from '../utils/format'
-import { readPublicCart, writePublicCart } from '../utils/publicCart'
+import { createPublicOrder, fetchPublicCatalog } from '@shared/api/client'
+import { formatCurrency } from '@shared/utils/format'
+import { readPublicCart, writePublicCart } from '@shared/utils/publicCart'
 
 function normalizePositiveInteger(value) {
   const parsed = Number(value)
@@ -194,7 +194,7 @@ export function OnlineOrderScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-[100dvh] bg-white">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 md:px-8">
           <a href="/" className="text-sm font-bold text-slate-900">Grill & Coffee</a>
@@ -212,7 +212,7 @@ export function OnlineOrderScreen() {
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 py-6 md:px-8 lg:grid-cols-[1fr_360px]">
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 py-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <main className="p-0 md:p-0">
           <header className="mb-5 pb-2">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#2d71f8]">Order</p>
@@ -334,7 +334,7 @@ export function OnlineOrderScreen() {
           )}
         </main>
 
-        <aside className="sticky top-4 h-fit rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:p-5">
+        <aside className="h-fit rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:p-5 lg:sticky lg:top-4">
           <div className="mb-4 flex items-center gap-2">
             <ShoppingBag size={18} className="text-[#2d71f8]" />
             <h2 className="text-lg font-semibold text-slate-900">Order Summary</h2>

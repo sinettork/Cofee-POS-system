@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { loginPublicCustomer, registerPublicCustomer } from '../api/client'
+import { loginPublicCustomer, registerPublicCustomer } from '@shared/api/client'
 
 export function CustomerAuthScreen() {
   const [mode, setMode] = useState('login')
@@ -55,7 +55,7 @@ export function CustomerAuthScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10">
+    <div className="min-h-[100dvh] bg-slate-50 px-4 py-10">
       <div className="mx-auto w-full max-w-md">
         <a href="/" className="text-sm font-semibold text-[#2D71F8] hover:text-[#235ED3]">
           Back to Website
