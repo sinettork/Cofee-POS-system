@@ -61,6 +61,13 @@ export function ReceiptView({ data, onNewOrder }) {
           <p className="text-xs">Change: {formatCurrency(data?.changeAmount ?? 0, data?.currency)}</p>
         </>
       )}
+      {data?.paymentMethod === 'KHQR' && (
+        <>
+          <p className="text-xs">Received: {formatCurrency(data?.amountReceived ?? data?.total ?? 0, data?.currency)}</p>
+          {data?.receiverName ? <p className="text-xs">Receiver: {data.receiverName}</p> : null}
+          {data?.receiverAccount ? <p className="text-xs">Account: {data.receiverAccount}</p> : null}
+        </>
+      )}
 
       <div className="no-print mt-4 flex gap-2">
         <button

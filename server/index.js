@@ -35,11 +35,11 @@ const ORDER_TYPES = new Set(['Dine In', 'Take Away'])
 const ORDER_STATUSES = new Set(['Active', 'Closed', 'Done', 'Canceled'])
 const PAYMENT_STATUSES = new Set(['Paid', 'Unpaid'])
 const PAYMENT_METHODS = new Set(['Cash', 'KHQR', 'Card'])
-const USER_ROLES = new Set(['admin', 'manager', 'cashier'])
+const USER_ROLES = new Set(['manager', 'cashier'])
 const SETTING_KEYS = new Set(['taxRate', 'receiptFooter', 'defaultService'])
-const ROLE_CATALOG_MANAGER = ['admin', 'manager']
-const ROLE_OPERATOR = ['admin', 'manager', 'cashier']
-const ROLE_ADMIN = ['admin']
+const ROLE_CATALOG_MANAGER = ['manager']
+const ROLE_OPERATOR = ['manager', 'cashier']
+const ROLE_USER_MANAGER = ['manager']
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12
 const CUSTOMER_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14
 const sessionStore = new Map()
@@ -543,6 +543,14 @@ app.delete('/api/products/:productId', requireRoles(ROLE_CATALOG_MANAGER), (req,
     }
     res.json({ ok: true })
   } catch (error) {
+    if (error?.code === 'PRODUCT_HAS_MOVEMENTS') {
+      res.status(409).json({ error: String(error.message || 'Product cannot be deleted.') })
+      return
+    }
+    if (String(error?.message ?? '').includes('FOREIGN KEY')) {
+      res.status(409).json({ error: 'Product cannot be deleted because it is referenced by related records.' })
+      return
+    }
     res.status(500).json({ error: 'Unable to delete product.', details: String(error.message) })
   }
 })
@@ -816,7 +824,7 @@ app.get('/api/users', requireRoles(ROLE_CATALOG_MANAGER), (_req, res) => {
   }
 })
 
-app.post('/api/users', requireRoles(ROLE_ADMIN), (req, res) => {
+app.post('/api/users', requireRoles(ROLE_USER_MANAGER), (req, res) => {
   const username = String(req.body?.username ?? '').trim().toLowerCase()
   const displayName = String(req.body?.displayName ?? '').trim()
   const role = String(req.body?.role ?? '').trim().toLowerCase()
@@ -842,7 +850,7 @@ app.post('/api/users', requireRoles(ROLE_ADMIN), (req, res) => {
   }
 })
 
-app.patch('/api/users/:userId', requireRoles(ROLE_ADMIN), (req, res) => {
+app.patch('/api/users/:userId', requireRoles(ROLE_USER_MANAGER), (req, res) => {
   const userId = Number(req.params.userId)
   if (!Number.isFinite(userId) || userId <= 0) {
     res.status(400).json({ error: 'Invalid userId.' })
@@ -1124,6 +1132,9 @@ function handleKhqrGenerateRequest(req, res) {
     md5: generation.data.md5,
     amount,
     currency,
+    merchantName,
+    merchantCity,
+    accountId: accountID,
     expiresAt: expiresAt.toISOString(),
   })
 }

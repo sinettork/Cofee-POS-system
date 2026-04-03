@@ -2,8 +2,11 @@ import {
   ArrowRight,
   ArrowUpRight,
   CalendarDays,
+  Check,
+  CheckCircle2,
   Coffee,
   Download,
+  Loader2,
   Menu,
   Package,
   Pencil,
@@ -22,18 +25,18 @@ import { formatDate } from '@shared/utils/format'
 
 const PAGE_CONFIG = {
   inventory: {
-    title: 'Tenant Inventory',
-    subtitle: 'Track core coffee stock for daily operations.',
+    title: 'Inventory',
+    subtitle: 'Track stock and catalog health for daily operations.',
     icon: Package,
   },
   teams: {
-    title: 'Teams',
-    subtitle: 'Manage staff assignments for the tenant.',
+    title: 'Team',
+    subtitle: 'Manage staff accounts and role access.',
     icon: Users,
   },
   settings: {
-    title: 'Tenant Settings',
-    subtitle: 'Configure tax, receipt, and coffee shop defaults.',
+    title: 'Settings',
+    subtitle: 'Configure tax, receipt, and service defaults.',
     icon: Settings,
   },
 }
@@ -234,6 +237,71 @@ function formatSignedQuantity(value) {
   return parsed > 0 ? `+${rounded}` : rounded
 }
 
+function DropdownField({
+  value,
+  options = [],
+  onChange,
+  placeholder = 'Select option',
+  disabled = false,
+  buttonClassName = '',
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef(null)
+  const selected = options.find((option) => option.value === value)
+  const label = selected?.label || placeholder
+
+  useEffect(() => {
+    if (!open) return undefined
+    const handlePointerDown = (event) => {
+      if (wrapperRef.current?.contains(event.target)) return
+      setOpen(false)
+    }
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => window.removeEventListener('mousedown', handlePointerDown)
+  }, [open])
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className={`ui-input inline-flex h-10 w-full cursor-pointer select-none items-center justify-between rounded-xl border-stone-200 px-3 py-2 text-sm font-semibold text-stone-800 focus-visible:border-[#7c4a32] focus-visible:ring-4 focus-visible:ring-amber-900/5 disabled:cursor-not-allowed disabled:opacity-70 ${buttonClassName}`}
+      >
+        <span className="truncate">{label}</span>
+        <Menu size={14} className="text-slate-400" />
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-xl border border-stone-200 bg-white p-1 shadow-[0_16px_34px_rgba(0,0,0,0.14)]">
+          {options.map((option) => {
+            const isActive = option.value === value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                disabled={option.disabled}
+                onClick={() => {
+                  if (option.disabled) return
+                  onChange(option.value)
+                  setOpen(false)
+                }}
+                className={`flex w-full cursor-pointer select-none items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
+                  isActive
+                    ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
+                    : 'text-stone-700 hover:bg-stone-50'
+                }`}
+              >
+                <span className="truncate">{option.label}</span>
+                {isActive && <Check size={14} />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ManageScreen({
   now,
   page,
@@ -275,6 +343,7 @@ export function ManageScreen({
   const [productError, setProductError] = useState('')
   const [savingProduct, setSavingProduct] = useState(false)
   const [creatingCategory, setCreatingCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
   const [stockUpdatingId, setStockUpdatingId] = useState('')
   const [importingProducts, setImportingProducts] = useState(false)
   const [movementSearch, setMovementSearch] = useState('')
@@ -282,6 +351,7 @@ export function ManageScreen({
   const [productDraft, setProductDraft] = useState(() =>
     createEmptyProductDraft(categoryOptions[0]?.id ?? 'coffee'),
   )
+  const categoryNameInputRef = useRef(null)
   const imageFileInputRef = useRef(null)
   const importFileInputRef = useRef(null)
 
@@ -364,7 +434,7 @@ export function ManageScreen({
     onAction?.(`${config.title} saved successfully.`)
   }
 
-  const canCreateUsers = String(currentUserRole).toLowerCase() === 'admin'
+  const canCreateUsers = String(currentUserRole).toLowerCase() === 'manager'
 
   const handleCreateUser = async () => {
     if (!canCreateUsers) return
@@ -410,13 +480,6 @@ export function ManageScreen({
   const teamStats = users.length
     ? [
         {
-          label: 'Admin',
-          total: users.filter((item) => String(item.role).toLowerCase() === 'admin').length,
-          onShift: users.filter(
-            (item) => String(item.role).toLowerCase() === 'admin' && Boolean(item.active),
-          ).length,
-        },
-        {
           label: 'Manager',
           total: users.filter((item) => String(item.role).toLowerCase() === 'manager').length,
           onShift: users.filter(
@@ -439,18 +502,16 @@ export function ManageScreen({
     setProductDraft(createEmptyProductDraft(categoryOptions[0]?.id ?? 'coffee'))
   }
 
-  const handleCreateCategoryFromDropdown = async () => {
+  const createCategoryFromName = async (rawName) => {
     if (!canManageCatalog) return
     if (!onCreateCategory) {
       setProductError('Category creation is not available.')
-      return
+      return false
     }
-    const categoryNameInput = window.prompt('Enter new category name:')
-    if (categoryNameInput === null) return
-    const name = categoryNameInput.trim()
+    const name = String(rawName ?? '').trim()
     if (!name) {
       setProductError('Category name is required.')
-      return
+      return false
     }
 
     const existingCategory = categoryOptions.find(
@@ -458,8 +519,9 @@ export function ManageScreen({
     )
     if (existingCategory) {
       setProductDraft((previous) => ({ ...previous, category: existingCategory.id }))
+      setNewCategoryName('')
       onAction?.(`Category "${existingCategory.name}" already exists.`)
-      return
+      return true
     }
 
     setCreatingCategory(true)
@@ -471,12 +533,25 @@ export function ManageScreen({
         ...previous,
         category: created.id,
       }))
+      setNewCategoryName('')
       onAction?.(`Category "${created.name}" created.`)
+      return true
     } catch (error) {
       setProductError(error.message || 'Failed to create category.')
+      return false
     } finally {
       setCreatingCategory(false)
     }
+  }
+
+  const handleCreateCategoryFromDropdown = () => {
+    setProductError('')
+    categoryNameInputRef.current?.focus()
+    categoryNameInputRef.current?.select()
+  }
+
+  const handleCreateCategoryFromForm = async () => {
+    await createCategoryFromName(newCategoryName)
   }
 
   const submitProductForm = async () => {
@@ -670,6 +745,29 @@ export function ManageScreen({
   })
   const validCategoryIds = new Set(categoryOptions.map((item) => item.id))
   const fallbackCategoryId = categoryOptions[0]?.id ?? 'coffee'
+  const productCategoryDropdownValue = categoryOptions.some((item) => item.id === productDraft.category)
+    ? productDraft.category
+    : categoryOptions[0]?.id ?? ''
+  const productCategoryOptions = useMemo(() => {
+    if (categoryOptions.length === 0) {
+      return [
+        { value: '', label: 'No category available', disabled: true },
+        { value: ADD_CATEGORY_OPTION, label: '+ Add new category...' },
+      ]
+    }
+    return [
+      ...categoryOptions.map((item) => ({ value: item.id, label: item.name })),
+      { value: ADD_CATEGORY_OPTION, label: '+ Add new category...' },
+    ]
+  }, [categoryOptions])
+  const userRoleOptions = [
+    { value: 'cashier', label: 'cashier' },
+    { value: 'manager', label: 'manager' },
+  ]
+  const defaultServiceOptions = [
+    { value: 'Dine In', label: 'Dine In' },
+    { value: 'Take Away', label: 'Take Away' },
+  ]
   const recentInventoryMovements = inventoryMovements.slice(0, 80)
   const movementKeyword = movementSearch.trim().toLowerCase()
   const filteredInventoryMovements = recentInventoryMovements
@@ -1155,6 +1253,24 @@ export function ManageScreen({
                         </button>
                       )}
                     </div>
+                    <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                      <input
+                        ref={categoryNameInputRef}
+                        value={newCategoryName}
+                        onChange={(event) => setNewCategoryName(event.target.value)}
+                        placeholder="New category name"
+                        className="ui-input px-3 py-2 text-sm font-medium"
+                        disabled={!canManageCatalog || creatingCategory}
+                      />
+                      <button
+                        onClick={handleCreateCategoryFromForm}
+                        type="button"
+                        disabled={!canManageCatalog || creatingCategory}
+                        className="ui-btn ui-btn-secondary px-3 py-2 text-sm text-stone-600 hover:bg-stone-50 disabled:text-stone-400"
+                      >
+                        {creatingCategory ? 'Adding...' : 'Add Category'}
+                      </button>
+                    </div>
                     <fieldset className="space-y-2 disabled:opacity-70" disabled={!canManageCatalog || creatingCategory}>
                       <input
                         value={productDraft.name}
@@ -1165,14 +1281,10 @@ export function ManageScreen({
                         className="ui-input px-3 py-2 text-sm font-medium"
                       />
                       <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={
-                            categoryOptions.some((item) => item.id === productDraft.category)
-                              ? productDraft.category
-                              : ''
-                          }
-                          onChange={(event) => {
-                            const nextCategory = event.target.value
+                        <DropdownField
+                          value={productCategoryDropdownValue}
+                          options={productCategoryOptions}
+                          onChange={(nextCategory) => {
                             if (nextCategory === ADD_CATEGORY_OPTION) {
                               void handleCreateCategoryFromDropdown()
                               return
@@ -1182,20 +1294,9 @@ export function ManageScreen({
                               category: nextCategory,
                             }))
                           }}
-                          className="ui-input px-3 py-2 text-sm font-medium"
-                        >
-                          {categoryOptions.length === 0 && (
-                            <option value="" disabled>
-                              No category available
-                            </option>
-                          )}
-                          {categoryOptions.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                          <option value={ADD_CATEGORY_OPTION}>+ Add new category...</option>
-                        </select>
+                          placeholder="Select category"
+                          buttonClassName="font-medium"
+                        />
                         <input
                           value={productDraft.label}
                           onChange={(event) =>
@@ -1512,17 +1613,13 @@ export function ManageScreen({
                         placeholder="display name"
                         className="ui-input px-3 py-2 text-sm"
                       />
-                      <select
+                      <DropdownField
                         value={newUserDraft.role}
-                        onChange={(event) =>
-                          setNewUserDraft((previous) => ({ ...previous, role: event.target.value }))
+                        options={userRoleOptions}
+                        onChange={(nextRole) =>
+                          setNewUserDraft((previous) => ({ ...previous, role: nextRole }))
                         }
-                        className="ui-input px-3 py-2 text-sm"
-                      >
-                        <option value="cashier">cashier</option>
-                        <option value="manager">manager</option>
-                        <option value="admin">admin</option>
-                      </select>
+                      />
                       <input
                         type="password"
                         value={newUserDraft.password}
@@ -1600,19 +1697,17 @@ export function ManageScreen({
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-slate-600">
                   Default Service
-                  <select
+                  <DropdownField
                     value={settings.defaultService}
-                    onChange={(event) =>
+                    options={defaultServiceOptions}
+                    onChange={(nextService) =>
                       setSettings((previous) => ({
                         ...previous,
-                        defaultService: event.target.value,
+                        defaultService: nextService,
                       }))
                     }
-                    className="ui-input px-3 py-2 text-sm"
-                  >
-                    <option>Dine In</option>
-                    <option>Take Away</option>
-                  </select>
+                    buttonClassName="font-medium"
+                  />
                 </label>
                 <label className="flex flex-col gap-1 text-sm text-slate-600">
                   Receipt Footer

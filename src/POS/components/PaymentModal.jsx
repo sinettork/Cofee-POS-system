@@ -126,6 +126,8 @@ export function PaymentModal({
         paymentMethod: selectedMethod,
         amountReceived: Number(nextAmountReceived ?? 0),
         changeAmount: Number(changeAmount ?? 0),
+        receiverName: selectedMethod === 'KHQR' ? String(khqrData?.merchantName ?? '') : '',
+        receiverAccount: selectedMethod === 'KHQR' ? String(khqrData?.accountId ?? '') : '',
         currency,
         createdAt: new Date(),
       })
@@ -145,6 +147,8 @@ export function PaymentModal({
       tableName,
       tax,
       totalAmount,
+      khqrData?.merchantName,
+      khqrData?.accountId,
     ],
   )
 
@@ -459,15 +463,15 @@ export function PaymentModal({
                 <KHQRCard
                   amount={totalAmount}
                   currency={currency}
+                  accountName={khqrData?.merchantName || ''}
                   qrValue={khqrData?.qr || ''}
                 />
               </div>
 
               <div className="mx-auto mt-4 w-full max-w-[320px]">
-                <div className="flex items-center justify-between text-xs text-slate-600">
-                  <span>Bill: {khqrData?.billNumber || '-'}</span>
+                <div className="flex items-center justify-center">
                   <span
-                      className={`rounded-full px-2 py-0.5 font-semibold ${
+                      className={`rounded-full px-4 py-1.5 text-base font-black tabular-nums ${
                           khqrCountdownSeconds > 30
                               ? 'bg-emerald-50 text-emerald-700'
                               : 'bg-rose-50 text-rose-700'
