@@ -19,9 +19,9 @@ export const PAGE_ITEMS = [
 
 export const QUICK_MENU_ITEMS = [
   ...PAGE_ITEMS,
-  { id: 'inventory', name: 'Tenant Inventory', icon: Package },
-  { id: 'teams', name: 'Teams', icon: Users },
-  { id: 'settings', name: 'Tenant Settings', icon: Settings },
+  { id: 'inventory', name: 'Inventory', icon: Package },
+  { id: 'teams', name: 'Team', icon: Users },
+  { id: 'settings', name: 'Settings', icon: Settings },
 ]
 
 export const CATEGORY_ITEMS = [

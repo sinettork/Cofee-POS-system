@@ -8,8 +8,8 @@ export function RailButton({ icon, active, onClick }) {
       onClick={onClick}
       className={`ui-btn h-11 w-11 ${
         active
-          ? 'bg-[#2D71F8] text-white shadow-[0_8px_16px_rgba(45,113,248,0.28)]'
-          : 'ui-btn-ghost text-slate-400 hover:text-[#2D71F8]'
+          ? 'bg-[var(--ui-primary)] text-white shadow-[0_8px_16px_rgba(124,74,50,0.28)]'
+          : 'ui-btn-ghost text-slate-400 hover:text-[var(--ui-primary)]'
       }`}
     >
       {createElement(icon, { size: 18 })}

@@ -1,6 +1,7 @@
 import {
   Bell,
   CalendarDays,
+  Check,
   Clock3,
   Coffee,
   Edit2,
@@ -55,10 +56,14 @@ export function PosScreen({
   const [trackingSort, setTrackingSort] = useState('latest')
   const [trackVisible, setTrackVisible] = useState(true)
   const [stockAlertOpen, setStockAlertOpen] = useState(false)
+  const [tableDropdownOpen, setTableDropdownOpen] = useState(false)
+  const [orderTypeDropdownOpen, setOrderTypeDropdownOpen] = useState(false)
   const cartIdRef = useRef(1)
   const productSearchInputRef = useRef(null)
   const customerInputRef = useRef(null)
   const stockAlertPanelRef = useRef(null)
+  const tableDropdownRef = useRef(null)
+  const orderTypeDropdownRef = useRef(null)
 
   const mergedCategories = useMemo(() => {
     const baseById = new Map(CATEGORY_ITEMS.map((item) => [item.id, item]))
@@ -108,6 +113,7 @@ export function PosScreen({
   }, [tableGroups])
   const resolvedTaxRate = Number.isFinite(Number(taxRate)) ? Math.max(0, Number(taxRate)) : 0.1
   const taxLabel = `Tax (${(resolvedTaxRate * 100).toFixed(1).replace(/\.0$/, '')}%)`
+  const orderTypeOptions = ['Dine In', 'Take Away']
 
   const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0)
   const tax = subtotal * resolvedTaxRate
@@ -198,6 +204,19 @@ export function PosScreen({
       setTableName(allTables[0]?.label ?? 'Table 01')
     }
   }, [allTables, tableName])
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!tableDropdownRef.current?.contains(event.target)) {
+        setTableDropdownOpen(false)
+      }
+      if (!orderTypeDropdownRef.current?.contains(event.target)) {
+        setOrderTypeDropdownOpen(false)
+      }
+    }
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => window.removeEventListener('mousedown', handlePointerDown)
+  }, [])
 
   const goToInventoryFromAlert = () => {
     setStockAlertOpen(false)
@@ -373,7 +392,7 @@ export function PosScreen({
   }
 
   return (
-    <div className="grid min-h-[100dvh] w-full grid-cols-1 gap-3 overflow-x-hidden bg-white p-3 md:p-4 xl:grid-cols-[74px_minmax(0,1fr)_380px] xl:overflow-hidden">
+    <div className="grid h-full min-h-0 w-full grid-cols-1 gap-3 overflow-hidden bg-white p-3 md:p-4 xl:grid-cols-[74px_minmax(0,1fr)_380px]">
       <aside className="ui-surface hidden rounded-[24px] p-3 xl:flex xl:flex-col xl:items-center xl:justify-between">
         <div className="flex w-full flex-col items-center gap-5">
           <button onClick={onOpenMenu} className="ui-btn ui-btn-primary mt-1 h-11 w-11 rounded-full p-0 shadow-lg shadow-amber-900/10">
@@ -481,8 +500,8 @@ export function PosScreen({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-3 -mx-1 px-1">
+        <div className="flex min-h-0 flex-1 flex-col p-4 md:p-6">
+          <div className="scrollbar-hide -mx-1 flex gap-3 overflow-x-auto px-1 pb-3 pt-1">
             {mergedCategories.map((item) => {
               const Icon = item.icon
               const isActive = activeCategory === item.id
@@ -512,14 +531,14 @@ export function PosScreen({
                     </p>
                   </div>
                   {isActive && (
-                    <div className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></div>
+                    <div className="absolute right-3 top-3 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-[#7c4a32]"></div>
                   )}
                 </button>
               )
             })}
           </div>
 
-          <label className="relative my-5 block">
+          <label className="relative my-5 block shrink-0">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
             <input
               ref={productSearchInputRef}
@@ -534,7 +553,7 @@ export function PosScreen({
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 2xl:grid-cols-4">
+          <div className="scrollbar-hide grid min-h-0 flex-1 grid-cols-2 gap-4 overflow-y-auto pr-1 md:grid-cols-3 2xl:grid-cols-4">
             {filteredProducts.map((product) => {
               const availableQty = availableStockForProduct(product)
               const isOutOfStock = availableQty <= 0
@@ -732,34 +751,81 @@ export function PosScreen({
               />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="relative">
-                <select
-                  value={tableName}
-                  onChange={(event) => setTableName(event.target.value)}
-                  className="ui-input h-11 appearance-none px-4 py-2 text-sm font-bold text-stone-800 border-stone-200 focus:border-[#7c4a32] focus:ring-4 focus:ring-amber-900/5"
+              <div ref={tableDropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTableDropdownOpen((open) => !open)
+                    setOrderTypeDropdownOpen(false)
+                  }}
+                  className="ui-input inline-flex h-11 w-full cursor-pointer select-none items-center justify-between rounded-2xl border-stone-200 px-4 py-2 text-sm font-bold text-stone-800 focus-visible:border-[#7c4a32] focus-visible:ring-4 focus-visible:ring-amber-900/5"
                 >
-                  {allTables.map((table) => (
-                    <option key={table.id || table.label} value={table.label}>
-                      {table.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Menu size={14} />
-                </div>
+                  <span>{tableName}</span>
+                  <Menu size={14} className="text-slate-400" />
+                </button>
+                {tableDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_34px_rgba(0,0,0,0.14)]">
+                    {allTables.map((table) => {
+                      const isActiveTable = table.label === tableName
+                      return (
+                        <button
+                          key={table.id || table.label}
+                          type="button"
+                          onClick={() => {
+                            setTableName(table.label)
+                            setTableDropdownOpen(false)
+                          }}
+                          className={`flex w-full cursor-pointer select-none items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                            isActiveTable
+                              ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
+                              : 'text-stone-700 hover:bg-stone-50'
+                          }`}
+                        >
+                          <span>{table.label}</span>
+                          {isActiveTable && <Check size={14} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              <div className="relative">
-                <select
-                  value={orderType}
-                  onChange={(event) => setOrderType(event.target.value)}
-                  className="ui-input h-11 appearance-none px-4 py-2 text-sm font-bold text-stone-800 border-stone-200 focus:border-[#7c4a32] focus:ring-4 focus:ring-amber-900/5"
+              <div ref={orderTypeDropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderTypeDropdownOpen((open) => !open)
+                    setTableDropdownOpen(false)
+                  }}
+                  className="ui-input inline-flex h-11 w-full cursor-pointer select-none items-center justify-between rounded-2xl border-stone-200 px-4 py-2 text-sm font-bold text-stone-800 focus-visible:border-[#7c4a32] focus-visible:ring-4 focus-visible:ring-amber-900/5"
                 >
-                  <option>Dine In</option>
-                  <option>Take Away</option>
-                </select>
-                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <Menu size={14} />
-                </div>
+                  <span>{orderType}</span>
+                  <Menu size={14} className="text-slate-400" />
+                </button>
+                {orderTypeDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_34px_rgba(0,0,0,0.14)]">
+                    {orderTypeOptions.map((option) => {
+                      const isActiveOption = option === orderType
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => {
+                            setOrderType(option)
+                            setOrderTypeDropdownOpen(false)
+                          }}
+                          className={`flex w-full cursor-pointer select-none items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                            isActiveOption
+                              ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
+                              : 'text-stone-700 hover:bg-stone-50'
+                          }`}
+                        >
+                          <span>{option}</span>
+                          {isActiveOption && <Check size={14} />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>

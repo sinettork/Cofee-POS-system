@@ -12,7 +12,6 @@ This project keeps frontend and backend in one repository while separating conce
 |   |-- assets/                 # Images/icons
 |   |-- Website/                # Public website, auth, online ordering
 |   |-- POS/                    # POS domain UI
-|   |-- AdminPanel/             # Admin panel domain UI
 |   `-- shared/                 # Shared API client, utils, cross-domain UI
 |-- server/                     # Backend application (Express)
 |   |-- database/               # SQLite access + seed definitions
@@ -33,7 +32,6 @@ This project keeps frontend and backend in one repository while separating conce
 - Keep route wiring inside `src/app/`.
 - Keep website-specific logic under `src/Website/`.
 - Keep POS logic under `src/POS/`.
-- Keep admin-panel logic under `src/AdminPanel/`.
 - Keep cross-domain logic in `src/shared/`.
 - Keep DB/seed logic inside `server/database/`.
 - Prefer adding new backend route handlers in `server/routes/`.

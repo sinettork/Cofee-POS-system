@@ -17,7 +17,6 @@ const ORDER_TRANSITIONS = {
 }
 const AUTH_PEPPER = process.env.POS_AUTH_PEPPER || 'tenant-pos-auth-pepper'
 const DEFAULT_USERS = [
-  { username: 'admin', displayName: 'System Admin', role: 'admin', password: 'admin123' },
   { username: 'manager', displayName: 'Store Manager', role: 'manager', password: 'manager123' },
   { username: 'cashier', displayName: 'Front Cashier', role: 'cashier', password: 'cashier123' },
 ]
@@ -174,6 +173,7 @@ ensureProductColumns()
 seedIfEmpty()
 ensureOpeningInventoryMovements()
 ensureDefaultUsers()
+ensureLegacyAdminUsersAreManagers()
 ensureDefaultSettings()
 ensureCustomerAccountColumns()
 
@@ -822,7 +822,23 @@ export function updateProduct(productId, payload) {
 }
 
 export function deleteProduct(productId) {
-  const result = db.prepare('DELETE FROM products WHERE id = ?').run(productId)
+  const normalizedId = String(productId ?? '').trim()
+  if (!normalizedId) return false
+
+  const existing = db.prepare('SELECT id FROM products WHERE id = ? LIMIT 1').get(normalizedId)
+  if (!existing) return false
+
+  const movementCount = Number(
+    db.prepare('SELECT COUNT(*) AS count FROM inventory_movements WHERE product_id = ?').get(normalizedId)?.count ?? 0,
+  )
+  if (movementCount > 0) {
+    throw createDomainError(
+      'PRODUCT_HAS_MOVEMENTS',
+      'Cannot delete product with inventory history. Keep it for audit and set stock to 0 instead.',
+    )
+  }
+
+  const result = db.prepare('DELETE FROM products WHERE id = ?').run(normalizedId)
   return result.changes > 0
 }
 
@@ -1441,6 +1457,14 @@ function ensureDefaultUsers() {
       now,
     )
   })
+}
+
+function ensureLegacyAdminUsersAreManagers() {
+  db.prepare(`
+    UPDATE users
+    SET role = 'manager'
+    WHERE LOWER(role) = 'admin'
+  `).run()
 }
 
 function ensureDefaultSettings() {

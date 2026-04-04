@@ -74,7 +74,12 @@ export function ActivityScreen({
     setUpdatingOrderNumber(row.order)
     try {
       await onUpdateOrderStatus(row.order, status, paymentStatus)
-      onAction?.(`Order ${row.order} updated to ${status}.`)
+      const normalizedStatus = String(status ?? '').trim().toLowerCase()
+      if (normalizedStatus === 'done') {
+        onAction?.(`Order ${row.order} completed.`)
+      } else {
+        onAction?.(`Order ${row.order} updated to ${status}.`)
+      }
     } catch (error) {
       setActionError(error.message || 'Failed to update order status.')
     } finally {

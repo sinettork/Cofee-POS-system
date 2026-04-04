@@ -3,6 +3,41 @@ import { LogOut, X } from 'lucide-react'
 export function MainDrawer({ open, currentPage, items, currentUser, onNavigate, onClose, onSignOut }) {
   const roleLabel = String(currentUser?.role ?? 'cashier')
   const displayName = String(currentUser?.displayName ?? 'Tenant User')
+  const primaryItems = items.filter((item) => ['pos', 'activity', 'report'].includes(item.id))
+  const manageItems = items.filter((item) => ['inventory', 'teams', 'settings'].includes(item.id))
+  const extraItems = items.filter(
+    (item) => !['pos', 'activity', 'report', 'inventory', 'teams', 'settings'].includes(item.id),
+  )
+
+  const renderNavCard = (item, { compact = false } = {}) => {
+    const Icon = item.icon
+    const isActive = item.id === currentPage
+    return (
+      <button
+        key={item.id}
+        onClick={() => onNavigate(item.id)}
+        className={`ui-btn flex w-full items-center justify-start gap-3 rounded-xl border px-3 text-sm transition-all ${
+          compact ? 'py-2.5' : 'py-3'
+        } ${
+          isActive
+            ? 'border-[#7c4a32]/30 bg-[#7c4a32]/10 text-[var(--ui-primary)] shadow-sm'
+            : 'border-stone-200 bg-white text-stone-700 shadow-sm hover:border-stone-300 hover:bg-stone-50'
+        }`}
+      >
+        <span
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
+            isActive
+              ? 'border-[#7c4a32]/20 bg-[#7c4a32]/15 text-[var(--ui-primary)]'
+              : 'border-stone-200 bg-stone-50 text-stone-500'
+          }`}
+        >
+          <Icon size={16} />
+        </span>
+        <span className="font-semibold tracking-tight">{item.name}</span>
+      </button>
+    )
+  }
+
   return (
     <div className={`fixed inset-0 z-40 transition ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}>
       <div
@@ -20,29 +55,33 @@ export function MainDrawer({ open, currentPage, items, currentUser, onNavigate, 
             <p className="font-semibold text-slate-900">{displayName}</p>
             <p className="text-xs capitalize text-slate-400">{roleLabel}</p>
           </div>
-          <button onClick={onClose} className="ui-btn ui-btn-danger ui-icon-btn p-1 text-red-400">
+          <button
+            onClick={onClose}
+            className="ui-btn ui-btn-ghost ui-icon-btn p-1 text-[var(--ui-primary)] hover:bg-[#7c4a32]/10"
+          >
             <X size={16} />
           </button>
         </div>
 
-        <nav className="space-y-1">
-          {items.map((item) => {
-            const Icon = item.icon
-            const isActive = item.id === currentPage
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                className={`ui-btn flex w-full items-center justify-start gap-3 px-3 py-2.5 text-sm ${
-                  isActive ? 'bg-[#2D71F8]/10 text-[#2D71F8]' : 'text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <Icon size={16} />
-                {item.name}
-              </button>
-            )
-          })}
+        <nav className="space-y-3">
+          <div>
+            <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">POS</p>
+            <div className="space-y-1.5">
+              {primaryItems.map((item) => renderNavCard(item, { compact: true }))}
+            </div>
+          </div>
+
+          {manageItems.length > 0 && (
+            <div className="ui-surface rounded-2xl p-2">
+              <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">Management</p>
+              <div className="space-y-1.5">
+                {manageItems.map((item) => renderNavCard(item, { compact: true }))}
+              </div>
+            </div>
+          )}
         </nav>
+
+        {extraItems.length > 0 && <nav className="mt-2 space-y-1.5">{extraItems.map((item) => renderNavCard(item))}</nav>}
 
         <button
           onClick={() => {

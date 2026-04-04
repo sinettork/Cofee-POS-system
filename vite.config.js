@@ -10,7 +10,6 @@ export default defineConfig({
       '@app': '/src/app',
       '@POS': '/src/POS',
       '@Website': '/src/Website',
-      '@AdminPanel': '/src/AdminPanel',
       '@shared': '/src/shared',
       '@assets': '/src/assets',
     },

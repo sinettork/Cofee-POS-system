@@ -36,7 +36,6 @@ import {
 } from './constants/uiData'
 
 const ROLE_PAGE_ACCESS = {
-  admin: ['pos', 'activity', 'report', 'inventory', 'teams', 'settings'],
   manager: ['pos', 'activity', 'report', 'inventory', 'teams', 'settings'],
   cashier: ['pos', 'activity'],
 }
@@ -112,7 +111,10 @@ export default function PosApp() {
     () => PAGE_ITEMS.filter((item) => allowedPages.includes(item.id)),
     [allowedPages],
   )
-  const canManageCatalog = useMemo(() => ['admin', 'manager'].includes(String(currentUser?.role ?? '').toLowerCase()), [currentUser?.role])
+  const canManageCatalog = useMemo(
+    () => String(currentUser?.role ?? '').toLowerCase() === 'manager',
+    [currentUser?.role],
+  )
 
   useEffect(() => {
     if (!currentUser) return
@@ -304,13 +306,13 @@ export default function PosApp() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-white">
+    <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-white">
       {syncError && (
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
           {syncError}
         </div>
       )}
-      <div className="flex min-h-[100dvh] w-full overflow-x-hidden">
+      <div className="flex min-h-0 flex-1 w-full overflow-hidden">
         {page === 'pos' && (
           <PosScreen
             now={now}

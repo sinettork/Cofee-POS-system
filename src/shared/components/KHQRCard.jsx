@@ -25,9 +25,19 @@ export function KHQRCard({
 
         <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 px-0 pb-12">
           <div className="flex w-full flex-col items-start gap-1 px-6">
-            {accountName && <div className="text-sm font-bold leading-[19.6px] text-neutralb-600">{accountName}</div>}
+            {accountName && (
+              <div
+                className="text-sm font-bold leading-[19.6px] text-neutralb-600"
+                style={{ fontFamily: '"Nunito Sans", sans-serif' }}
+              >
+                {accountName}
+              </div>
+            )}
             <div className="flex items-center gap-1">
-              <div className="text-center text-[22px] font-bold leading-7 text-textpb-01">
+              <div
+                className="text-center text-[22px] font-bold leading-7 text-textpb-01"
+                style={{ fontFamily: '"Nunito Sans", sans-serif' }}
+              >
                 {displayAmount} {currency}
               </div>
             </div>
