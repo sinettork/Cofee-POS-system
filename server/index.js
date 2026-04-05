@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { CURRENCY as KHQRCurrency, KHQR, TAG } from 'ts-khqr'
 import {
+  assignDriver,
   createCustomerAccount,
   createCategory,
   createKhqrTransaction,
@@ -11,16 +12,19 @@ import {
   createProduct,
   db,
   deleteProduct,
+  getDeliveryQueue,
   getKhqrTransactionByMd5,
   getBootstrapData,
   getCatalogSnapshot,
   getInventoryMovements,
+  getOrderById,
   getProductById,
   getProductCatalog,
   getReportSummary,
   getCustomerAccountById,
   getUserByUsername,
   updateCustomerAccount,
+  updateDeliveryStatus,
   updateKhqrTransactionStatus,
   updateOrderStatus,
   updateProduct,
@@ -31,7 +35,7 @@ import {
 const app = express()
 const port = Number(process.env.PORT ?? 4000)
 const EXCHANGE_RATE_KHR = 4100
-const ORDER_TYPES = new Set(['Dine In', 'Take Away'])
+const ORDER_TYPES = new Set(['Dine In', 'Take Away', 'Delivery'])
 const ORDER_STATUSES = new Set(['Active', 'Closed', 'Done', 'Canceled'])
 const PAYMENT_STATUSES = new Set(['Paid', 'Unpaid'])
 const PAYMENT_METHODS = new Set(['Cash', 'KHQR', 'Card'])
@@ -146,6 +150,78 @@ app.post('/api/public/orders', (req, res) => {
       return
     }
     res.status(500).json({ error: 'Failed to create public order.', details: String(error.message) })
+  }
+})
+
+app.post('/api/public/orders/delivery', (req, res) => {
+  const customerSession = readCustomerSession(req)
+  if (!customerSession) {
+    res.status(401).json({ error: 'Customer login is required for delivery orders.' })
+    return
+  }
+
+  const deliveryAddress = String(req.body?.deliveryAddress ?? '').trim()
+  const deliveryPhone = String(req.body?.deliveryPhone ?? '').trim()
+  const deliveryNote = String(req.body?.deliveryNote ?? '').trim()
+
+  if (!deliveryAddress) {
+    res.status(400).json({ error: 'Delivery address is required.' })
+    return
+  }
+  if (!deliveryPhone) {
+    res.status(400).json({ error: 'Delivery phone number is required.' })
+    return
+  }
+
+  const payload = parsePublicOnlineOrderPayload({
+    ...(req.body ?? {}),
+    customerName: String(req.body?.customerName ?? customerSession.fullName ?? '').trim(),
+    orderType: 'Delivery',
+  })
+
+  if (!payload.ok) {
+    res.status(400).json({ error: payload.error })
+    return
+  }
+
+  try {
+    const orderPayload = {
+      ...payload.value,
+      orderType: 'Delivery',
+      table: 'Online Delivery',
+    }
+    const result = createOrder(orderPayload)
+    const orderId = result.orderId
+
+    // Save delivery details
+    db.prepare(`
+      UPDATE orders
+      SET delivery_address = ?, delivery_phone = ?, delivery_note = ?, delivery_status = 'pending'
+      WHERE id = ?
+    `).run(deliveryAddress, deliveryPhone, deliveryNote, orderId)
+
+    res.status(201).json({
+      orderId,
+      orderNumber: result.orderNumber,
+      orderType: 'Delivery',
+      status: 'Active',
+      deliveryStatus: 'pending',
+      paymentMethod: payload.value.paymentMethod,
+      paymentStatus: payload.value.paymentStatus,
+      message:
+        payload.value.paymentStatus === 'Paid'
+          ? 'Payment processed. Your delivery order is confirmed!'
+          : 'Delivery order received. Awaiting confirmation.',
+    })
+  } catch (error) {
+    if (error?.code === 'PRODUCT_NOT_FOUND' || error?.code === 'INSUFFICIENT_STOCK') {
+      res.status(400).json({ error: String(error.message || 'Unable to create delivery order.') })
+      return
+    }
+    res.status(500).json({
+      error: 'Failed to create delivery order.',
+      details: String(error.message),
+    })
   }
 })
 
@@ -700,6 +776,152 @@ app.get('/api/orders/:orderNumber', requireRoles(ROLE_OPERATOR), (req, res) => {
   }
 })
 
+// Delivery Routes
+app.get('/api/delivery/queue', requireRoles(ROLE_OPERATOR), (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit ?? 50), 200)
+    const deliveries = getDeliveryQueue(limit)
+    res.json({ deliveries })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load delivery queue.', details: String(error.message) })
+  }
+})
+
+app.get('/api/delivery/:orderId', requireRoles(ROLE_OPERATOR), (req, res) => {
+  const orderId = Number(req.params.orderId ?? 0)
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    res.status(400).json({ error: 'Invalid orderId.' })
+    return
+  }
+  try {
+    const order = getOrderById(orderId)
+    if (!order) {
+      res.status(404).json({ error: 'Order not found.' })
+      return
+    }
+    const delivery = db
+      .prepare('SELECT * FROM deliveries WHERE order_id = ?')
+      .get(orderId)
+    res.json({ order, delivery: delivery || null })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load delivery.', details: String(error.message) })
+  }
+})
+
+app.get('/api/public/delivery/:orderId', (req, res) => {
+  // Public endpoint for customers to view their delivery status
+  const session = readCustomerSession(req)
+  if (!session) {
+    res.status(401).json({ error: 'Customer session required.' })
+    return
+  }
+  const orderId = Number(req.params.orderId ?? 0)
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    res.status(400).json({ error: 'Invalid orderId.' })
+    return
+  }
+  try {
+    const order = getOrderById(orderId)
+    if (!order) {
+      res.status(404).json({ error: 'Order not found.' })
+      return
+    }
+    // For now, allow any customer to view any delivery (in production, verify customer ownership)
+    // This could be enhanced to check if order belongs to customer
+    const delivery = db
+      .prepare('SELECT * FROM deliveries WHERE order_id = ?')
+      .get(orderId)
+    res.json({
+      id: order.id,
+      order_number: order.order_number,
+      customer_name: order.customer_name,
+      delivery_address: order.delivery_address,
+      delivery_phone: order.delivery_phone,
+      delivery_note: order.delivery_note,
+      delivery_status: order.delivery_status,
+      status: order.status,
+      total: order.total,
+      currency: order.currency,
+      created_at: order.created_at,
+      driver_name: delivery?.driver_name || null,
+      driver_phone: delivery?.driver_phone || null,
+      assigned_at: delivery?.assigned_at || null,
+      picked_up_at: delivery?.picked_up_at || null,
+      delivered_at: delivery?.delivered_at || null,
+    })
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load delivery.', details: String(error.message) })
+  }
+})
+
+app.patch('/api/delivery/:orderId/assign', requireRoles(ROLE_OPERATOR), (req, res) => {
+  const orderId = Number(req.params.orderId ?? 0)
+  const driverName = String(req.body?.driverName ?? '').trim()
+  const driverPhone = String(req.body?.driverPhone ?? '').trim()
+
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    res.status(400).json({ error: 'Invalid orderId.' })
+    return
+  }
+  if (!driverName) {
+    res.status(400).json({ error: 'driverName is required.' })
+    return
+  }
+
+  try {
+    const order = getOrderById(orderId)
+    if (!order) {
+      res.status(404).json({ error: 'Order not found.' })
+      return
+    }
+    if (order.order_type !== 'Delivery') {
+      res.status(400).json({ error: 'Order is not a delivery order.' })
+      return
+    }
+    const success = assignDriver(orderId, driverName, driverPhone)
+    if (success) {
+      res.json({ ok: true, message: 'Driver assigned successfully.' })
+    } else {
+      res.status(500).json({ error: 'Failed to assign driver.' })
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to assign driver.', details: String(error.message) })
+  }
+})
+
+app.patch('/api/delivery/:orderId/status', requireRoles(ROLE_OPERATOR), (req, res) => {
+  const orderId = Number(req.params.orderId ?? 0)
+  const deliveryStatus = String(req.body?.status ?? '').trim()
+
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    res.status(400).json({ error: 'Invalid orderId.' })
+    return
+  }
+  if (!deliveryStatus) {
+    res.status(400).json({ error: 'status is required.' })
+    return
+  }
+
+  try {
+    const order = getOrderById(orderId)
+    if (!order) {
+      res.status(404).json({ error: 'Order not found.' })
+      return
+    }
+    const success = updateDeliveryStatus(orderId, deliveryStatus)
+    if (success) {
+      res.json({ ok: true, message: `Delivery status updated to ${deliveryStatus}.` })
+    } else {
+      res.status(500).json({ error: 'Failed to update delivery status.' })
+    }
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to update delivery status.',
+      details: String(error.message),
+    })
+  }
+})
+
 app.patch('/api/tables/:tableId', requireRoles(ROLE_OPERATOR), (req, res) => {
   const tableId = String(req.params.tableId ?? '').trim()
   const status = String(req.body?.status ?? '').trim().toLowerCase()
@@ -1250,7 +1472,7 @@ function parseCreateOrderPayload(source) {
   if (!paymentStatus || !PAYMENT_STATUSES.has(paymentStatus)) {
     return { ok: false, error: 'Invalid paymentStatus.' }
   }
-  const initialStatus = sanitizeOrderStatus(source.status) ?? 'Active'
+  const initialStatus = sanitizeOrderStatus(source.status) ?? (paymentStatus === 'Paid' ? 'Closed' : 'Active')
   if (!ORDER_STATUSES.has(initialStatus)) {
     return { ok: false, error: 'Invalid order status.' }
   }
@@ -1326,6 +1548,7 @@ function parseCreateOrderPayload(source) {
       customerName,
       tableName,
       orderType,
+      status: initialStatus,
       paymentMethod,
       paymentStatus,
       currency,

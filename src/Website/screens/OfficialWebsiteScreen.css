@@ -373,7 +373,8 @@
   transition: all 0.2s;
 }
 
-.eloise-map-trigger:hover, .eloise-map-trigger.active {
+.eloise-map-trigger:hover,
+.eloise-map-trigger.active {
   background: #fffaf5;
   border-color: var(--caramel);
 }
@@ -416,7 +417,8 @@
   gap: 0.75rem;
 }
 
-.detect-btn, .save-btn {
+.detect-btn,
+.save-btn {
   flex: 1;
   height: 3rem;
   border-radius: 0.75rem;
@@ -483,11 +485,35 @@
   animation: slideUp 0.3s ease;
 }
 
-.eloise-status-msg.error { background: #fee2e2; color: #b91c1c; }
-.eloise-status-msg.success { background: #d1fae5; color: #047857; }
+.eloise-status-msg.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
 
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.eloise-status-msg.success {
+  background: #d1fae5;
+  color: #047857;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
 
 .eloise-address-preset-row div {
   display: inline-flex;
@@ -1231,7 +1257,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: center;
-  gap: 2rem;
+  gap: 3rem;
   padding: 8rem var(--container-padding) 4rem;
   position: relative;
   overflow: hidden;
@@ -1254,6 +1280,12 @@
 .eloise-hero-text {
   position: relative;
   z-index: 1;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  padding: 3rem;
+  border-radius: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.06);
 }
 
 .eloise-hero-tag {
@@ -1262,13 +1294,14 @@
   gap: 0.5rem;
   background: var(--warm);
   border-radius: 50px;
-  padding: 0.4rem 1rem;
+  padding: 0.5rem 1.2rem;
   font-size: 0.75rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--caramel);
-  font-weight: 500;
+  font-weight: 600;
   margin-bottom: 1.8rem;
+  box-shadow: 0 4px 12px rgba(124, 74, 50, 0.1);
 }
 
 .eloise-hero-tag::before {
@@ -1295,7 +1328,7 @@
 
 .eloise-hero-actions {
   display: flex;
-  gap: 1rem;
+  gap: 1.2rem;
   align-items: center;
 }
 
@@ -1305,20 +1338,22 @@
   gap: 0.4rem;
   background: var(--espresso);
   color: var(--cream);
-  padding: 0.9rem 2rem;
+  padding: 0.95rem 2.2rem;
   border-radius: 50px;
   text-decoration: none;
   font-size: 0.85rem;
   letter-spacing: 0.08em;
-  font-weight: 500;
-  transition: all 0.2s;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid var(--espresso);
+  box-shadow: 0 4px 16px rgba(41, 37, 36, 0.15);
 }
 
 .eloise-btn-primary:hover {
   background: var(--caramel);
   border-color: var(--caramel);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(124, 74, 50, 0.25);
 }
 
 .eloise-btn-ghost {
@@ -1329,12 +1364,14 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-weight: 500;
-  transition: gap 0.2s;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0.5rem 0;
 }
 
 .eloise-btn-ghost:hover {
-  gap: 0.7rem;
+  gap: 0.8rem;
+  color: var(--caramel);
 }
 
 .eloise-hero-visual {
@@ -1481,6 +1518,7 @@
   font-size: 10rem;
   overflow: hidden;
   position: relative;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
 }
 
 .eloise-about-img-main::after {
@@ -1776,28 +1814,32 @@
 
 .eloise-experience {
   padding: 8rem 3rem;
+  background: linear-gradient(180deg, #fafaf9 0%, #f5f0eb 50%, #fefaf6 100%);
 }
 
 .eloise-exp-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 2rem;
+  gap: 2.5rem;
   max-width: 1100px;
   margin: 3rem auto 0;
 }
 
 .eloise-exp-card {
-  padding: 2.5rem 2rem;
-  border-radius: 24px;
+  padding: 2.8rem 2.2rem;
+  border-radius: 28px;
   border: 1.5px solid var(--warm);
+  background: linear-gradient(135deg, #ffffff 0%, #fafaf9 100%);
   position: relative;
   overflow: hidden;
-  transition: border-color 0.25s, transform 0.25s;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 16px rgba(41, 37, 36, 0.05);
 }
 
 .eloise-exp-card:hover {
   border-color: var(--caramel);
-  transform: translateY(-4px);
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px rgba(124, 74, 50, 0.12);
 }
 
 .eloise-exp-card::before {
@@ -1806,10 +1848,10 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
+  height: 4px;
   background: linear-gradient(90deg, var(--caramel), var(--gold));
   opacity: 0;
-  transition: opacity 0.25s;
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .eloise-exp-card:hover::before {
@@ -1835,7 +1877,7 @@
 }
 
 .eloise-testimonials {
-  background: var(--espresso);
+  background: linear-gradient(135deg, #1a1916 0%, #292524 50%, #2c2823 100%);
   padding: 8rem 3rem;
   position: relative;
   overflow: hidden;
@@ -1868,17 +1910,26 @@
 .eloise-test-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 2rem;
+  gap: 2.5rem;
   max-width: 1100px;
   margin: 3rem auto 0;
 }
 
 .eloise-test-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(96, 165, 250, 0.25);
-  border-radius: 20px;
-  padding: 2rem;
-  backdrop-filter: blur(10px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border: 1.5px solid rgba(214, 211, 209, 0.15);
+  border-radius: 24px;
+  padding: 2.4rem;
+  backdrop-filter: blur(12px);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.eloise-test-card:hover {
+  border-color: rgba(214, 211, 209, 0.3);
+  transform: translateY(-6px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
 }
 
 .eloise-stars {
@@ -1950,7 +2001,7 @@
 
 .eloise-info-details {
   padding: 5rem 4rem;
-  background: var(--milk);
+  background: linear-gradient(135deg, #ffffff 0%, #fafaf9 100%);
 }
 
 .eloise-info-details h2 {
@@ -2008,48 +2059,61 @@
 }
 
 .eloise-newsletter {
-  padding: 7rem 3rem;
+  padding: 8rem 3rem;
   text-align: center;
-  background: var(--cream);
+  background: linear-gradient(180deg, #fefaf6 0%, #f5f0eb 50%, #fefaf6 100%);
 }
 
 .eloise-newsletter h2 {
   font-size: clamp(2rem, 3.5vw, 3.5rem);
-  margin: 0 0 1rem;
+  margin: 0 0 1.2rem;
 }
 
 .eloise-newsletter p {
   color: var(--smoke);
-  margin: 0 0 2.5rem;
+  margin: 0 0 3rem;
   font-size: 0.95rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .eloise-newsletter-form {
   display: flex;
-  gap: 0.5rem;
-  max-width: 460px;
+  gap: 0.7rem;
+  max-width: 500px;
   margin: 0 auto;
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.08);
+  padding: 0.6rem;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50px;
 }
 
 .eloise-newsletter-form input {
   flex: 1;
-  padding: 0.9rem 1.4rem;
-  border: 1.5px solid var(--warm);
+  padding: 1rem 1.6rem;
+  border: none;
   border-radius: 50px;
   font-family: 'Urbanist', sans-serif;
   font-size: 0.9rem;
-  background: var(--milk);
+  background: transparent;
   color: var(--espresso);
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.eloise-newsletter-form input::placeholder {
+  color: var(--smoke);
 }
 
 .eloise-newsletter-form input:focus {
-  border-color: var(--caramel);
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .eloise-newsletter-form button {
-  padding: 0.9rem 1.8rem;
+  padding: 1rem 2.2rem;
   border-radius: 50px;
   background: var(--espresso);
   color: var(--cream);
@@ -2057,12 +2121,17 @@
   cursor: pointer;
   font-family: 'Urbanist', sans-serif;
   font-size: 0.85rem;
-  letter-spacing: 0.07em;
-  transition: background 0.2s;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(41, 37, 36, 0.15);
+  white-space: nowrap;
 }
 
 .eloise-newsletter-form button:hover {
   background: var(--caramel);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 74, 50, 0.2);
 }
 
 .eloise-footer {
@@ -2204,23 +2273,28 @@
 }
 
 @keyframes eloiseMorph {
+
   0%,
   100% {
     border-radius: 60% 40% 55% 45% / 50% 45% 55% 50%;
   }
+
   33% {
     border-radius: 45% 55% 40% 60% / 55% 50% 50% 45%;
   }
+
   66% {
     border-radius: 55% 45% 60% 40% / 45% 55% 45% 55%;
   }
 }
 
 @keyframes eloiseFloat {
+
   0%,
   100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-14px);
   }
@@ -2230,6 +2304,7 @@
   from {
     transform: translateX(0);
   }
+
   to {
     transform: translateX(-50%);
   }
@@ -2239,6 +2314,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }

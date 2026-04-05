@@ -181,9 +181,9 @@ export function ActivityScreen({
   return (
     <div className="grid min-h-[100dvh] w-full grid-cols-1 overflow-hidden">
       <div className="grid min-h-0 grid-cols-1 overflow-hidden bg-white lg:h-full lg:grid-cols-[240px_1fr]">
-        <aside className="border-r border-slate-100 bg-slate-50/60 p-4">
+        <aside className="border-r border-stone-100 bg-[#fcfaf8] p-4">
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
             <input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
@@ -191,27 +191,33 @@ export function ActivityScreen({
               placeholder="Search customer / order / table..."
             />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <button
               onClick={() => setTab('billing')}
-              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm font-bold transition-all ${
-                tab === 'billing' ? 'bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10' : 'bg-white text-stone-700 hover:bg-stone-50'
+              className={`flex w-full items-center justify-start rounded-2xl px-4 py-3 text-left text-sm transition-colors ${
+                tab === 'billing'
+                  ? 'bg-[#f6eee8] font-semibold text-[var(--ui-primary)]'
+                  : 'bg-transparent font-medium text-stone-700 hover:bg-[#faf4ef]'
               }`}
             >
               Billing Queue
             </button>
             <button
               onClick={() => setTab('tables')}
-              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm font-bold transition-all ${
-                tab === 'tables' ? 'bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10' : 'bg-white text-stone-700 hover:bg-stone-50'
+              className={`flex w-full items-center justify-start rounded-2xl px-4 py-3 text-left text-sm transition-colors ${
+                tab === 'tables'
+                  ? 'bg-[#f6eee8] font-semibold text-[var(--ui-primary)]'
+                  : 'bg-transparent font-medium text-stone-700 hover:bg-[#faf4ef]'
               }`}
             >
               Tables
             </button>
             <button
               onClick={() => setTab('history')}
-              className={`ui-btn w-full justify-start px-4 py-2.5 text-left text-sm font-bold transition-all ${
-                tab === 'history' ? 'bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10' : 'bg-white text-stone-700 hover:bg-stone-50'
+              className={`flex w-full items-center justify-start rounded-2xl px-4 py-3 text-left text-sm transition-colors ${
+                tab === 'history'
+                  ? 'bg-[#f6eee8] font-semibold text-[var(--ui-primary)]'
+                  : 'bg-transparent font-medium text-stone-700 hover:bg-[#faf4ef]'
               }`}
             >
               Order History
@@ -273,10 +279,10 @@ export function ActivityScreen({
                       <button
                         key={item}
                         onClick={() => setFloor(item)}
-                        className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${
+                        className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
                           floor === item
-                            ? 'border border-[#7c4a32]/60 bg-[#7c4a32]/5 text-[#7c4a32]'
-                            : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                            ? 'border border-[var(--ui-primary)]/20 bg-[#f6eee8] text-[var(--ui-primary)]'
+                            : 'bg-stone-100/80 text-stone-500 hover:bg-[#f3ece6]'
                         }`}
                       >
                         {item}
@@ -302,12 +308,12 @@ export function ActivityScreen({
                             <article
                               key={table.id}
                               onClick={() => handleCycleTableStatus(group.title, table.id)}
-                              className={`group relative flex flex-col items-center rounded-[2rem] border-2 p-6 text-center transition-all duration-300 hover:-translate-y-1 hover:shadow-xl cursor-pointer ${
+                              className={`group relative flex cursor-pointer flex-col items-center rounded-[28px] border p-6 text-center transition-colors ${
                                 isServed
-                                  ? 'border-emerald-100 bg-white hover:border-emerald-400'
+                                  ? 'border-emerald-100 bg-emerald-50/30 hover:bg-emerald-50/50'
                                   : isReserved
-                                    ? 'border-rose-100 bg-rose-50/30 hover:border-rose-400'
-                                    : 'border-stone-100 bg-white hover:border-stone-200 hover:shadow-lg hover:shadow-stone-100'
+                                    ? 'border-rose-100 bg-rose-50/30 hover:bg-rose-50/50'
+                                    : 'border-stone-100 bg-white hover:bg-[#faf4ef]'
                               }`}
                             >
                               <div className="flex flex-col items-center gap-1">
@@ -323,19 +329,19 @@ export function ActivityScreen({
                                 </p>
                               </div>
 
-                              <div className="mt-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-stone-100 group-hover:ring-stone-200 transition-all">
+                              <div className="mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-white ring-1 ring-stone-100 transition-colors">
                                 <span
-                                  className={`h-3 w-3 rounded-full ring-4 ring-white shadow-sm ${
+                                  className={`h-3 w-3 rounded-full ring-4 ring-white ${
                                     isServed
                                       ? 'bg-emerald-500'
                                       : isReserved
                                         ? 'bg-rose-500 animate-pulse'
-                                        : 'bg-stone-300 group-hover:bg-stone-800'
+                                        : 'bg-stone-300 group-hover:bg-[var(--ui-primary)]'
                                   }`}
                                 />
                               </div>
 
-                              <div className="mt-4 inline-flex rounded-full bg-stone-50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-stone-500 shadow-sm ring-1 ring-stone-100 group-hover:bg-stone-800 group-hover:text-white transition-all">
+                              <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-widest text-stone-500 ring-1 ring-stone-100 transition-colors group-hover:bg-[#f6eee8] group-hover:text-[var(--ui-primary)]">
                                 {table.status}
                               </div>
                             </article>
@@ -351,7 +357,7 @@ export function ActivityScreen({
                   )}
                 </div>
                 <div className="mt-6 flex items-center gap-4 text-xs">
-                  <p className="font-semibold text-slate-600">Table Status:</p>
+                  <p className="font-semibold text-stone-600">Table Status:</p>
                   <StatusDot color="bg-emerald-400" label="Served" />
                   <StatusDot color="bg-red-400" label="Reserved" />
                   <StatusDot color="bg-slate-200" label="Available" />
@@ -367,10 +373,10 @@ export function ActivityScreen({
                       <button
                         key={item}
                         onClick={() => setBillingFilter(item)}
-                        className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${
+                        className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
                           billingFilter === item
-                            ? 'border border-[#7c4a32]/60 bg-[#7c4a32]/5 text-[#7c4a32]'
-                            : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                            ? 'border border-[var(--ui-primary)]/20 bg-[#f6eee8] text-[var(--ui-primary)]'
+                            : 'bg-stone-100/80 text-stone-500 hover:bg-[#f3ece6]'
                         }`}
                       >
                         {item}
@@ -385,7 +391,7 @@ export function ActivityScreen({
                   </button>
                 </div>
 
-                <div className="divide-y divide-stone-100 rounded-2xl border border-stone-100 bg-white">
+                <div className="divide-y divide-stone-100 rounded-[26px] border border-stone-100 bg-white">
                   {filteredBillingQueue.map((row) => (
                     <article key={row.id} className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-stone-50/50">
                       <div>
@@ -428,7 +434,7 @@ export function ActivityScreen({
                             <button
                               onClick={() => handleMarkOrder(row, 'Done', 'Paid')}
                               disabled={updatingOrderNumber === row.order}
-                              className="ui-btn rounded-lg border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:bg-stone-300"
+                              className="ui-btn rounded-2xl border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:bg-stone-300"
                             >
                               {updatingOrderNumber === row.order ? 'Saving...' : 'Mark Done'}
                             </button>
@@ -469,7 +475,7 @@ export function ActivityScreen({
                     {filteredTrackingOrders.map((order) => (
                       <article
                         key={order.id}
-                        className="group min-w-[300px] flex flex-col gap-4 overflow-hidden rounded-[2.5rem] border-2 border-stone-100 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-stone-200 hover:shadow-xl hover:shadow-stone-100"
+                        className="group flex min-w-[300px] flex-col gap-4 overflow-hidden rounded-[28px] border border-stone-100 bg-white p-6 transition-colors hover:bg-[#faf4ef]"
                       >
                         <div className="flex items-start justify-between">
                           <div className="min-w-0">
@@ -526,7 +532,7 @@ export function ActivityScreen({
             )}
 
             {tab === 'history' && (
-              <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-[26px] border border-stone-100 bg-white">
                 <div className="overflow-x-auto">
                   <div className="min-w-[760px]">
                     <div className="grid grid-cols-[88px_1.5fr_1fr_1fr_1fr_1fr_90px] gap-2 border-b border-stone-100 bg-stone-50 px-3 py-4 text-[10px] font-bold uppercase tracking-widest text-stone-500">
@@ -571,12 +577,12 @@ export function ActivityScreen({
 
       {selectedRowDetail && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm">
-          <div className="relative w-full max-w-md overflow-hidden rounded-[2.5rem] border-2 border-stone-100 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-md overflow-hidden rounded-[2.5rem] border border-stone-100 bg-white shadow-[0_24px_50px_rgba(41,37,36,0.12)] animate-in zoom-in-95 duration-200">
             <header className="flex items-center justify-between border-b border-stone-100 px-8 py-6">
               <h3 className="text-xl font-black text-stone-800 uppercase tracking-tight">Order Detail</h3>
               <button 
                 onClick={() => setSelectedRowDetail(null)}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-50 text-stone-400 hover:bg-stone-800 hover:text-white transition-all"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-50 text-stone-400 transition-colors hover:bg-[#faf4ef] hover:text-[var(--ui-primary)]"
               >
                 <X size={20} />
               </button>

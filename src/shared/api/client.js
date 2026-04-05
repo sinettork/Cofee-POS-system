@@ -1,3 +1,9 @@
+import {
+  ApiError,
+  classifyApiError,
+  logApiError,
+} from './errors.js'
+
 const AUTH_TOKEN_STORAGE_KEY = 'tenant-pos-auth-token'
 const CUSTOMER_AUTH_TOKEN_STORAGE_KEY = 'tenant-public-customer-token'
 
@@ -79,6 +85,14 @@ export async function createOrder(payload) {
   return requestJson('/api/orders', {
     method: 'POST',
     body: payload,
+  })
+}
+
+export async function createPublicDeliveryOrder(payload) {
+  return requestJson('/api/public/orders/delivery', {
+    method: 'POST',
+    body: payload,
+    auth: false,
   })
 }
 
@@ -314,10 +328,20 @@ async function requestJson(url, { method = 'GET', body, signal, auth = true, cus
     })
     if (!response.ok) {
       const details = await safeReadError(response)
-      throw new Error(details || `Request failed: ${response.status}`)
+      const error = new Error(details || `Request failed: ${response.status}`)
+      const apiError = classifyApiError(error, response.status)
+      logApiError(url, method, apiError)
+      throw apiError
     }
     if (response.status === 204) return null
     return await response.json()
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error
+    }
+    const apiError = classifyApiError(error)
+    logApiError(url, method, apiError)
+    throw apiError
   } finally {
     clearTimeout(timeoutId)
   }

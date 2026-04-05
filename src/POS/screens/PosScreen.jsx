@@ -13,6 +13,7 @@ import {
   Plus,
   Power,
   Search,
+  Trash2,
   UserRound,
 } from 'lucide-react'
 import { useDeferredValue, useEffect, useMemo, useRef, useState, startTransition } from 'react'
@@ -35,6 +36,8 @@ export function PosScreen({
   tableGroups = [],
   trackingOrders = TRACKING_ORDERS,
   taxRate = 0.1,
+  currency = 'USD',
+  exchangeRate = 4000,
   onPlaceOrder,
   onAction,
   onSignOut,
@@ -119,8 +122,9 @@ export function PosScreen({
   const tax = subtotal * resolvedTaxRate
   const discount = subtotal * discountRate
   const total = subtotal + tax - discount
-  const currency = DEFAULT_CURRENCY
-  const formatMoney = (usdAmount) => formatCurrency(usdAmount, currency)
+  const resolvedCurrency = ['USD', 'KHR'].includes(currency) ? currency : 'USD'
+  const resolvedExchangeRate = Number(exchangeRate ?? 4000)
+  const formatMoney = (amount) => formatCurrency(amount, resolvedCurrency, resolvedExchangeRate)
   const resolveStockQty = (product) => {
     const latestProduct = products.find((item) => item.id === product.id) ?? product
     const parsed = Number(latestProduct?.stockQty)
@@ -423,9 +427,8 @@ export function PosScreen({
           </div>
           <div className="flex items-center gap-2">
             <div
-              className={`ui-pill px-3 py-1 font-bold ${
-                cart.length > 0 ? 'bg-emerald-50 text-[#1C8370]' : 'bg-red-50 text-[#FC4A4A]'
-              }`}
+              className={`ui-pill px-3 py-1 font-bold ${cart.length > 0 ? 'bg-emerald-50 text-[#1C8370]' : 'bg-red-50 text-[#FC4A4A]'
+                }`}
             >
               {cart.length > 0 ? 'Open Order' : 'Close Order'}
             </div>
@@ -456,11 +459,10 @@ export function PosScreen({
                             <div className="flex items-center justify-between gap-2">
                               <p className="truncate text-sm font-semibold text-stone-800">{alert.name}</p>
                               <span
-                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                  alert.state === 'out'
-                                    ? 'bg-red-100 text-red-600'
-                                    : 'bg-amber-100 text-amber-700'
-                                }`}
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${alert.state === 'out'
+                                  ? 'bg-red-100 text-red-600'
+                                  : 'bg-amber-100 text-amber-700'
+                                  }`}
                               >
                                 {alert.state === 'out' ? 'Out' : 'Low'}
                               </span>
@@ -489,11 +491,10 @@ export function PosScreen({
             )}
             <button
               onClick={clearDraft}
-              className={`ui-btn ui-btn-ghost ui-icon-btn ${
-                cart.length > 0
-                  ? 'text-[#1C8370] hover:bg-emerald-50'
-                  : 'text-[#FC4A4A] hover:bg-red-50'
-              }`}
+              className={`ui-btn ui-btn-ghost ui-icon-btn ${cart.length > 0
+                ? 'text-[#1C8370] hover:bg-emerald-50'
+                : 'text-[#FC4A4A] hover:bg-red-50'
+                }`}
             >
               <Power size={18} />
             </button>
@@ -509,30 +510,27 @@ export function PosScreen({
                 <button
                   key={item.id}
                   onClick={() => setActiveCategory(item.id)}
-                  className={`relative flex min-w-[120px] flex-shrink-0 flex-col items-start gap-3 rounded-2xl border p-4 transition-all duration-300 ${
-                    isActive
-                      ? 'border-[#7c4a32] bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10 -translate-y-1'
-                      : 'border-stone-100 bg-white text-stone-600 hover:border-stone-200 hover:bg-stone-50'
-                  }`}
+                  className={`flex min-w-[128px] flex-shrink-0 flex-col items-start gap-3 rounded-[22px] border px-4 py-4 text-left transition-colors ${isActive
+                    ? 'border-[var(--ui-primary)]/35 bg-[#f7efe9] text-[var(--ui-primary)]'
+                    : 'border-stone-100 bg-white text-stone-600 hover:border-stone-200 hover:bg-stone-50/70'
+                    }`}
                 >
                   <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-stone-50 text-stone-500'
-                    }`}
+                    className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${isActive
+                      ? 'bg-[var(--ui-primary)] text-white'
+                      : 'bg-stone-50 text-stone-400 ring-1 ring-stone-100'
+                      }`}
                   >
-                    <Icon size={20} />
+                    <Icon size={18} />
                   </div>
                   <div>
-                    <p className={`text-sm font-bold ${isActive ? 'text-white' : 'text-stone-900'}`}>
+                    <p className={`text-sm ${isActive ? 'font-semibold text-[var(--ui-primary)]' : 'font-semibold text-stone-900'}`}>
                       {item.name}
                     </p>
-                    <p className={`text-[10px] font-medium uppercase tracking-wider ${isActive ? 'text-white/60' : 'text-stone-400'}`}>
+                    <p className={`text-xs ${isActive ? 'font-medium text-[var(--ui-primary)]/70' : 'font-medium text-stone-400'}`}>
                       {item.count} Items
                     </p>
                   </div>
-                  {isActive && (
-                    <div className="absolute right-3 top-3 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-[#7c4a32]"></div>
-                  )}
                 </button>
               )
             })}
@@ -560,11 +558,10 @@ export function PosScreen({
               return (
                 <div
                   key={product.id}
-                  className={`group relative flex flex-col rounded-3xl border bg-white p-3 transition-all duration-300 ${
-                    isOutOfStock
-                      ? 'cursor-not-allowed border-stone-100 opacity-60'
-                      : 'border-stone-100 hover:-translate-y-1 hover:border-emerald-100 hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]'
-                  }`}
+                  className={`group relative flex flex-col rounded-3xl border bg-white p-3 transition-all duration-300 ${isOutOfStock
+                    ? 'cursor-not-allowed border-stone-100 opacity-60'
+                    : 'border-stone-100 hover:-translate-y-1 hover:border-emerald-100 hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)]'
+                    }`}
                 >
                   <div className="relative mb-3 aspect-square overflow-hidden rounded-2xl bg-stone-50">
                     <img
@@ -572,20 +569,20 @@ export function PosScreen({
                       alt={product.name}
                       className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
                     />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                    <button
-                      onClick={() => {
-                        if (product.customizable) {
-                          setSelectedProduct(product)
-                        } else {
-                          addToCart(product)
-                        }
-                      }}
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-xl transition-all duration-300 hover:scale-110 active:scale-90"
-                    >
-                      {product.customizable ? <Edit2 size={24} /> : <Plus size={28} />}
-                    </button>
-                  </div>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                      <button
+                        onClick={() => {
+                          if (product.customizable) {
+                            setSelectedProduct(product)
+                          } else {
+                            addToCart(product)
+                          }
+                        }}
+                        className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-xl transition-all duration-300 hover:scale-110 active:scale-90"
+                      >
+                        {product.customizable ? <Edit2 size={24} /> : <Plus size={28} />}
+                      </button>
+                    </div>
                     {isOutOfStock && (
                       <div className="absolute inset-0 flex items-center justify-center bg-stone-900/40 backdrop-blur-[2px]">
                         <span className="rounded-full bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-900">
@@ -601,9 +598,8 @@ export function PosScreen({
                         {product.label}
                       </span>
                       <span
-                        className={`text-[10px] font-bold ${
-                          isOutOfStock ? 'text-red-500' : 'text-emerald-600'
-                        }`}
+                        className={`text-[10px] font-bold ${isOutOfStock ? 'text-red-500' : 'text-emerald-600'
+                          }`}
                       >
                         {isOutOfStock ? 'No Stock' : `${availableQty} Left`}
                       </span>
@@ -693,11 +689,10 @@ export function PosScreen({
                   <div className="mb-2 flex items-center justify-between">
                     <p className="font-bold text-stone-800">{order.name}</p>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        order.status === 'All Done'
-                          ? 'bg-emerald-50 text-[#1C8370]'
-                          : 'bg-stone-100 text-stone-500'
-                      }`}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${order.status === 'All Done'
+                        ? 'bg-emerald-50 text-[#1C8370]'
+                        : 'bg-stone-100 text-stone-500'
+                        }`}
                     >
                       {order.status}
                     </span>
@@ -733,8 +728,8 @@ export function PosScreen({
                 </div>
               </div>
             </div>
-            <button 
-              onClick={() => customerInputRef.current?.focus()} 
+            <button
+              onClick={() => customerInputRef.current?.focus()}
               className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-stone-200 text-stone-400 hover:text-stone-900 transition-all hover:shadow-sm"
             >
               <Edit2 size={16} />
@@ -775,11 +770,10 @@ export function PosScreen({
                             setTableName(table.label)
                             setTableDropdownOpen(false)
                           }}
-                          className={`flex w-full cursor-pointer select-none items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
-                            isActiveTable
-                              ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
-                              : 'text-stone-700 hover:bg-stone-50'
-                          }`}
+                          className={`flex w-full cursor-pointer select-none items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${isActiveTable
+                            ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
+                            : 'text-stone-700 hover:bg-stone-50'
+                            }`}
                         >
                           <span>{table.label}</span>
                           {isActiveTable && <Check size={14} />}
@@ -813,11 +807,10 @@ export function PosScreen({
                             setOrderType(option)
                             setOrderTypeDropdownOpen(false)
                           }}
-                          className={`flex w-full cursor-pointer select-none items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
-                            isActiveOption
-                              ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
-                              : 'text-stone-700 hover:bg-stone-50'
-                          }`}
+                          className={`flex w-full cursor-pointer select-none items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${isActiveOption
+                            ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
+                            : 'text-stone-700 hover:bg-stone-50'
+                            }`}
                         >
                           <span>{option}</span>
                           {isActiveOption && <Check size={14} />}
@@ -879,11 +872,10 @@ export function PosScreen({
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => updateCartNotes(item.cartId)}
-                      className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
-                        item.notes
-                          ? 'border-blue-100 bg-blue-50 text-[#2d71f8]'
-                          : 'border-stone-100 bg-white text-stone-400 hover:text-stone-600'
-                      }`}
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${item.notes
+                        ? 'border-blue-100 bg-blue-50 text-[#2d71f8]'
+                        : 'border-stone-100 bg-white text-stone-400 hover:text-stone-600'
+                        }`}
                       title={item.notes || 'Add note'}
                     >
                       <Paperclip size={14} />
@@ -893,7 +885,7 @@ export function PosScreen({
                       className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-100 bg-white text-stone-400 transition-colors hover:bg-red-50 hover:text-red-500"
                       title="Remove from cart"
                     >
-                      <LogOut size={14} className="rotate-180" />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                   <div className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white p-1 shadow-sm">
@@ -977,6 +969,7 @@ export function PosScreen({
         <PaymentModal
           totalAmount={total}
           currency={currency}
+          exchangeRate={exchangeRate}
           initialPaymentMethod={paymentMethod}
           loading={placingOrder}
           onClose={() => {

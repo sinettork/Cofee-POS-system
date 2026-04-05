@@ -152,17 +152,17 @@ export function ReportScreen({
   return (
     <div className="grid min-h-[100dvh] w-full grid-cols-1 overflow-hidden">
       <div className="flex min-h-0 h-full flex-col overflow-hidden bg-white">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 md:px-6">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-4 py-4 md:px-6">
           <div className="flex items-center gap-2">
-            <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-slate-500">
+            <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-stone-500">
               <Menu size={18} />
             </button>
-            <h1 className="text-xl font-semibold text-slate-900">Report</h1>
+            <h1 className="text-xl font-semibold text-stone-900">Report</h1>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleDownload}
-              className="ui-btn ui-btn-secondary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-slate-600"
+              className="ui-btn ui-btn-secondary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-stone-600"
             >
               Download
               <Download size={14} />
@@ -185,9 +185,9 @@ export function ReportScreen({
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <span className="font-medium text-slate-700">Date Period:</span>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[24px] border border-stone-100 bg-[#fcfaf8] p-3">
+            <div className="flex items-center gap-2 text-sm text-stone-500">
+              <span className="font-medium text-stone-700">Date Period:</span>
               <button
                 onClick={cyclePeriod}
                 className="ui-btn ui-btn-secondary inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm"
@@ -203,15 +203,15 @@ export function ReportScreen({
               className="ui-btn ui-btn-secondary inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm"
             >
               {showGraph ? 'Hide Graph' : 'Show Graph'}
-              <CircleDot size={16} className={showGraph ? 'text-[#2D71F8]' : 'text-slate-400'} />
+              <CircleDot size={16} className={showGraph ? 'text-[var(--ui-primary)]' : 'text-stone-400'} />
             </button>
           </div>
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white p-3">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[24px] border border-stone-100 bg-white p-3">
             {['today', 'week', 'month', 'all'].map((preset) => (
               <button
                 key={preset}
                 onClick={() => applyRange(preset)}
-                className="ui-btn ui-btn-secondary rounded-full px-3 py-1.5 text-xs text-slate-600"
+                className="ui-btn ui-btn-secondary rounded-full px-3 py-1.5 text-xs text-stone-600"
               >
                 {preset}
               </button>
@@ -262,28 +262,28 @@ export function ReportScreen({
           </div>
 
           <div className="mb-5 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-            <section className="ui-surface p-4">
+            <section className="ui-surface p-5">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Report Graph</h3>
+                <h3 className="text-lg font-semibold text-stone-900">Report Graph</h3>
                 <button
                   onClick={() =>
                     setMetricMode((current) =>
                       current === 'Total Sales Amount' ? 'Total Orders' : 'Total Sales Amount',
                     )
                   }
-                  className="ui-btn ui-btn-secondary inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-slate-600"
+                  className="ui-btn ui-btn-secondary inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-stone-600"
                 >
                   {metricMode}
                   <ChevronDown size={14} />
                 </button>
               </div>
               {showGraph ? (
-                <div className="h-[220px] overflow-hidden rounded-xl border border-slate-100 bg-[linear-gradient(120deg,rgba(45,113,248,0.03),rgba(45,113,248,0.09))] p-3">
+                <div className="h-[220px] overflow-hidden rounded-[22px] border border-stone-100 bg-[linear-gradient(120deg,rgba(124,74,50,0.03),rgba(124,74,50,0.10))] p-3">
                   <svg viewBox="0 0 640 200" className="h-full w-full">
                     <path
                       d="M0 120 C30 90, 50 150, 90 120 C130 90, 160 35, 210 70 C245 95, 265 130, 300 100 C330 70, 360 55, 390 110 C420 160, 470 150, 520 95 C550 65, 590 100, 640 130"
                       fill="none"
-                      stroke="#2D71F8"
+                      stroke="#7c4a32"
                       strokeWidth="3"
                     />
                     <path
@@ -292,14 +292,14 @@ export function ReportScreen({
                     />
                     <defs>
                       <linearGradient id="reportFill" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#2D71F8" stopOpacity="0.2" />
-                        <stop offset="100%" stopColor="#2D71F8" stopOpacity="0.02" />
+                        <stop offset="0%" stopColor="#7c4a32" stopOpacity="0.18" />
+                        <stop offset="100%" stopColor="#7c4a32" stopOpacity="0.02" />
                       </linearGradient>
                     </defs>
                   </svg>
                 </div>
               ) : (
-                <div className="flex h-[220px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-400">
+                <div className="flex h-[220px] items-center justify-center rounded-[22px] border border-dashed border-stone-200 bg-[#fcfaf8] text-sm text-stone-400">
                   Graph is hidden. Click "Show Graph" to display it.
                 </div>
               )}
@@ -310,15 +310,15 @@ export function ReportScreen({
               </div>
             </section>
 
-            <section className="ui-surface p-4">
+            <section className="ui-surface p-5">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Favorite Product</h3>
+                <h3 className="text-lg font-semibold text-stone-900">Favorite Product</h3>
                 <button
                   onClick={() => {
                     setFavoriteSearchOpen((open) => !open)
                     if (favoriteSearchOpen) setFavoriteKeyword('')
                   }}
-                  className="ui-btn ui-btn-ghost ui-icon-btn text-slate-400"
+                  className="ui-btn ui-btn-ghost ui-icon-btn text-stone-400"
                 >
                   <Search size={15} />
                 </button>
@@ -328,24 +328,24 @@ export function ReportScreen({
                   value={favoriteKeyword}
                   onChange={(event) => setFavoriteKeyword(event.target.value)}
                   placeholder="Search favorite product..."
-                  className="ui-input mb-3 px-3 py-2 text-sm text-slate-700"
+                  className="ui-input mb-3 px-3 py-2 text-sm text-stone-700"
                 />
               )}
               <div className="space-y-3">
                 {filteredFavorites.map((item) => (
-                  <article key={item.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2.5">
+                  <article key={item.id} className="flex items-center justify-between rounded-[20px] border border-stone-100 px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <img src={item.image} alt={item.name} className="h-10 w-10 rounded-lg object-cover" />
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                        <p className="text-xs text-slate-400">{item.category}</p>
+                        <p className="text-sm font-semibold text-stone-900">{item.name}</p>
+                        <p className="text-xs text-stone-400">{item.category}</p>
                       </div>
                     </div>
-                    <p className="text-sm font-semibold text-slate-700">{item.orderCount} Times</p>
+                    <p className="text-sm font-semibold text-stone-700">{item.orderCount} Times</p>
                   </article>
                 ))}
                 {filteredFavorites.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-200 px-3 py-3 text-sm text-slate-400">
+                  <div className="rounded-[20px] border border-dashed border-stone-200 px-3 py-3 text-sm text-stone-400">
                     No favorite products match this search.
                   </div>
                 )}
@@ -354,14 +354,14 @@ export function ReportScreen({
           </div>
 
           <section className="ui-surface">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-3">
-              <h3 className="text-lg font-semibold text-slate-900">All Orders</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 px-3 py-3">
+              <h3 className="text-lg font-semibold text-stone-900">All Orders</h3>
               <div className="flex items-center gap-2">
                 <HeaderChip icon={CalendarDays} label={rangeLabel} />
                 <HeaderChip icon={Clock3} label="08:00 AM - 01:00 PM" />
                 <button
                   onClick={cyclePaymentFilter}
-                  className="ui-btn ui-btn-ghost ui-icon-btn text-slate-500"
+                  className="ui-btn ui-btn-ghost ui-icon-btn text-stone-500"
                 >
                   <Filter size={15} />
                 </button>
@@ -369,7 +369,7 @@ export function ReportScreen({
             </div>
             <div className="overflow-x-auto">
               <div className="min-w-[800px]">
-                <div className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 bg-slate-50 px-3 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <div className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 bg-[#fcfaf8] px-3 py-3 text-xs font-semibold uppercase tracking-wide text-stone-500">
                   <p>#</p>
                   <p>Date & Time</p>
                   <p>Customer Name</p>
@@ -382,7 +382,7 @@ export function ReportScreen({
                   {filteredOrderRows.map((row) => (
                     <div
                       key={row.id + row.customer}
-                      className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 border-t border-slate-100 px-3 py-3 text-sm text-slate-700"
+                      className="grid grid-cols-[90px_1.5fr_1fr_1fr_1fr_1fr_100px] gap-2 border-t border-stone-100 px-3 py-3 text-sm text-stone-700"
                     >
                       <p>{row.id}</p>
                       <p>{row.date}</p>
@@ -392,13 +392,13 @@ export function ReportScreen({
                       <p className={row.paymentState === 'Paid' ? 'text-[#1C8370]' : 'text-[#FC4A4A]'}>
                         {row.paymentState}
                       </p>
-                      <button onClick={() => setDetailRow(row)} className="text-[#2D71F8] hover:underline">
+                      <button onClick={() => setDetailRow(row)} className="font-semibold text-[var(--ui-primary)] hover:underline">
                         Detail
                       </button>
                     </div>
                   ))}
                   {filteredOrderRows.length === 0 && (
-                    <div className="px-3 py-4 text-sm text-slate-400">No orders found for this payment filter.</div>
+                    <div className="px-3 py-4 text-sm text-stone-400">No orders found for this payment filter.</div>
                   )}
                 </div>
               </div>
@@ -408,39 +408,39 @@ export function ReportScreen({
       </div>
 
       {detailRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-900">Report Order Detail</h3>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[26px] border border-stone-100 bg-white p-5 shadow-[0_24px_50px_rgba(41,37,36,0.12)]">
+            <h3 className="text-lg font-semibold text-stone-900">Report Order Detail</h3>
+            <div className="mt-3 space-y-2 text-sm text-stone-600">
               <p>
-                <span className="font-semibold text-slate-800">Order:</span> #{detailRow.id}
+                <span className="font-semibold text-stone-800">Order:</span> #{detailRow.id}
               </p>
               <p>
-                <span className="font-semibold text-slate-800">Date:</span> {detailRow.date}
+                <span className="font-semibold text-stone-800">Date:</span> {detailRow.date}
               </p>
               <p>
-                <span className="font-semibold text-slate-800">Customer:</span> {detailRow.customer}
+                <span className="font-semibold text-stone-800">Customer:</span> {detailRow.customer}
               </p>
               <p>
-                <span className="font-semibold text-slate-800">Status:</span> {detailRow.state}
+                <span className="font-semibold text-stone-800">Status:</span> {detailRow.state}
               </p>
               <p>
-                <span className="font-semibold text-slate-800">Payment:</span>{' '}
+                <span className="font-semibold text-stone-800">Payment:</span>{' '}
                 {formatCurrency(detailRow.payment, detailRow.currency ?? 'USD')}
               </p>
               <p>
-                <span className="font-semibold text-slate-800">Payment State:</span>{' '}
+                <span className="font-semibold text-stone-800">Payment State:</span>{' '}
                 {detailRow.paymentState}
               </p>
               {detailRow.paymentMethod && (
                 <p>
-                  <span className="font-semibold text-slate-800">Payment Method:</span>{' '}
+                  <span className="font-semibold text-stone-800">Payment Method:</span>{' '}
                   {detailRow.paymentMethod}
                 </p>
               )}
               {Number.isFinite(detailRow.amountReceived) && (
                 <p>
-                  <span className="font-semibold text-slate-800">Received:</span>{' '}
+                  <span className="font-semibold text-stone-800">Received:</span>{' '}
                   {formatCurrency(
                     detailRow.amountReceived,
                     detailRow.paymentCurrency ?? detailRow.currency ?? 'USD',
@@ -449,7 +449,7 @@ export function ReportScreen({
               )}
               {Number.isFinite(detailRow.changeAmount) && (
                 <p>
-                  <span className="font-semibold text-slate-800">Change:</span>{' '}
+                  <span className="font-semibold text-stone-800">Change:</span>{' '}
                   {formatCurrency(
                     detailRow.changeAmount,
                     detailRow.paymentCurrency ?? detailRow.currency ?? 'USD',

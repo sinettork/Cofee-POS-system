@@ -12,6 +12,7 @@ import {
   Plus,
   ShoppingCart,
   Trash2,
+  Truck,
   User,
   UserRound,
   X,
@@ -19,6 +20,7 @@ import {
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createPublicOrder,
+  createPublicDeliveryOrder,
   logoutPublicCustomer,
   updatePublicCustomerProfile,
 } from '@shared/api/client'
@@ -57,6 +59,8 @@ export function OfficialWebsiteScreen({ checkoutPage = false }) {
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerNote, setCustomerNote] = useState('')
+  const [orderType, setOrderType] = useState('takeaway') // 'takeaway' or 'delivery'
+  const [deliveryPhone, setDeliveryPhone] = useState('')
   const { customerSession, setCustomerSession, customerReady } = usePublicCustomerSession()
   const { paymentConfig } = usePublicPaymentConfig()
   const [profileOpen, setProfileOpen] = useState(false)
@@ -244,10 +248,10 @@ export function OfficialWebsiteScreen({ checkoutPage = false }) {
       : placingOrder
         ? 'Placing Order...'
         : paymentMethod === 'Cash'
-          ? 'Place Cash on Delivery Order'
+          ? `Place Cash on ${orderType === 'delivery' ? 'Delivery' : 'Takeaway'} Order`
           : paymentMethod === 'KHQR'
-            ? 'Place KHQR Order'
-            : 'Place Order'
+            ? `Place KHQR ${orderType === 'delivery' ? 'Delivery' : 'Takeaway'} Order`
+            : `Place ${orderType === 'delivery' ? 'Delivery' : 'Takeaway'} Order`
   const visibleNavLinks = checkoutPage ? [{ href: '/', label: 'Website' }] : NAV_LINKS
 
   const openCheckoutPage = () => {
@@ -476,32 +480,84 @@ export function OfficialWebsiteScreen({ checkoutPage = false }) {
 
   const submitPublicOrder = async (selectedMethod) => {
     const safeName = customerName.trim()
-    const response = await createPublicOrder({
-      customerName: safeName,
-      phone: customerPhone.trim(),
-      address: profileAddress.trim(),
-      note: customerNote.trim(),
-      paymentMethod: selectedMethod,
-      items: cartLines.map((line) => ({
-        productId: line.product.id,
-        quantity: line.quantity,
-      })),
-    })
-    writePublicCart([])
-    syncCartFromStorage()
-    setCheckoutSuccess(
-      `Order ${String(response?.orderNumber ?? 'N/A')} submitted with ${selectedMethod} payment.`,
-    )
-    setLatestOrder({
-      orderNumber: String(response?.orderNumber ?? 'N/A'),
-      paymentMethod: selectedMethod,
-      placedAt: Date.now(),
-      etaMinutes: 35,
-    })
-    setCustomerName('')
-    setCustomerPhone('')
-    setCustomerNote('')
-    setPaymentMethod('Cash')
+
+    if (orderType === 'delivery') {
+      // Delivery order
+      if (!profileAddress.trim()) {
+        setCheckoutError('Delivery address is required.')
+        return
+      }
+      const phoneForDelivery = deliveryPhone.trim() || customerPhone.trim()
+      if (!phoneForDelivery) {
+        setCheckoutError('Phone number is required for delivery.')
+        return
+      }
+
+      const response = await createPublicDeliveryOrder({
+        customerName: safeName,
+        deliveryAddress: profileAddress.trim(),
+        deliveryPhone: phoneForDelivery,
+        deliveryNote: customerNote.trim(),
+        paymentMethod: selectedMethod,
+        paymentStatus: selectedMethod === 'KHQR' || selectedMethod === 'Card' ? 'Paid' : 'Paid',
+        items: cartLines.map((line) => ({
+          productId: line.product.id,
+          quantity: line.quantity,
+        })),
+      })
+      writePublicCart([])
+      syncCartFromStorage()
+
+      // Save order ID and redirect to tracking page
+      localStorage.setItem('current-delivery-order-id', String(response.orderId))
+      setCheckoutSuccess(`Delivery order ${String(response?.orderNumber ?? 'N/A')} confirmed!`)
+      setLatestOrder({
+        orderNumber: String(response?.orderNumber ?? 'N/A'),
+        paymentMethod: selectedMethod,
+        placedAt: Date.now(),
+        etaMinutes: 35,
+      })
+
+      // Reset form
+      setCustomerName('')
+      setCustomerPhone('')
+      setDeliveryPhone('')
+      setCustomerNote('')
+      setPaymentMethod('Cash')
+
+      // Redirect to tracking page after 2 seconds
+      setTimeout(() => {
+        window.location.href = `/delivery-tracking?orderId=${response.orderId}`
+      }, 2000)
+    } else {
+      // Takeaway order
+      const response = await createPublicOrder({
+        customerName: safeName,
+        phone: customerPhone.trim(),
+        address: profileAddress.trim(),
+        note: customerNote.trim(),
+        paymentMethod: selectedMethod,
+        items: cartLines.map((line) => ({
+          productId: line.product.id,
+          quantity: line.quantity,
+        })),
+      })
+      writePublicCart([])
+      syncCartFromStorage()
+      setCheckoutSuccess(
+        `Order ${String(response?.orderNumber ?? 'N/A')} submitted with ${selectedMethod} payment.`,
+      )
+      setLatestOrder({
+        orderNumber: String(response?.orderNumber ?? 'N/A'),
+        paymentMethod: selectedMethod,
+        placedAt: Date.now(),
+        etaMinutes: 35,
+      })
+      setCustomerName('')
+      setCustomerPhone('')
+      setCustomerNote('')
+      setPaymentMethod('Cash')
+    }
   }
 
   const handleCheckout = async () => {
@@ -518,6 +574,19 @@ export function OfficialWebsiteScreen({ checkoutPage = false }) {
     if (!safeName) {
       setCheckoutError('Customer name is required.')
       return
+    }
+
+    // Delivery-specific validation
+    if (orderType === 'delivery') {
+      if (!profileAddress.trim()) {
+        setCheckoutError('Delivery address is required.')
+        return
+      }
+      const phoneForDelivery = deliveryPhone.trim() || customerPhone.trim()
+      if (!phoneForDelivery) {
+        setCheckoutError('Phone number is required for delivery.')
+        return
+      }
     }
 
     if (paymentMethod === 'KHQR' && !hasStaticKhqr) {
@@ -598,105 +667,105 @@ export function OfficialWebsiteScreen({ checkoutPage = false }) {
                     </button>
                   </header>
 
-                <div className="eloise-profile-content">
-                  <div className="eloise-profile-form">
-                    <label>
-                      Full Name
-                      <input
-                        type="text"
-                        value={profileFullName}
-                        onChange={(event) => setProfileFullName(event.target.value)}
-                        placeholder="Your full name"
-                      />
-                    </label>
-                    <label>
-                      Email Address
-                      <input
-                        type="email"
-                        value={profileEmail}
-                        onChange={(event) => setProfileEmail(event.target.value)}
-                        placeholder="name@gmail.com"
-                      />
-                    </label>
-                    <label>
-                      Phone Number
-                      <input
-                        type="text"
-                        value={profilePhone}
-                        onChange={(event) => setProfilePhone(event.target.value)}
-                        placeholder="Phone number"
-                      />
-                    </label>
-                    <label>
-                      Delivery Address
-                      <textarea
-                        rows={3}
-                        value={profileAddress}
-                        onChange={(event) => setProfileAddress(event.target.value)}
-                        placeholder="Street, Building, Apartment..."
-                      />
-                    </label>
-                    
-                    <div className="eloise-address-presets-v2">
-                      <div className="preset-item">
-                        <Home size={14} />
-                        <span>Home</span>
-                        <div className="preset-actions">
-                          <button type="button" onClick={() => applySavedAddress('home')}>Apply</button>
-                          <button type="button" className="save" onClick={() => saveAddressPreset('home')}>Set</button>
+                  <div className="eloise-profile-content">
+                    <div className="eloise-profile-form">
+                      <label>
+                        Full Name
+                        <input
+                          type="text"
+                          value={profileFullName}
+                          onChange={(event) => setProfileFullName(event.target.value)}
+                          placeholder="Your full name"
+                        />
+                      </label>
+                      <label>
+                        Email Address
+                        <input
+                          type="email"
+                          value={profileEmail}
+                          onChange={(event) => setProfileEmail(event.target.value)}
+                          placeholder="name@gmail.com"
+                        />
+                      </label>
+                      <label>
+                        Phone Number
+                        <input
+                          type="text"
+                          value={profilePhone}
+                          onChange={(event) => setProfilePhone(event.target.value)}
+                          placeholder="Phone number"
+                        />
+                      </label>
+                      <label>
+                        Delivery Address
+                        <textarea
+                          rows={3}
+                          value={profileAddress}
+                          onChange={(event) => setProfileAddress(event.target.value)}
+                          placeholder="Street, Building, Apartment..."
+                        />
+                      </label>
+
+                      <div className="eloise-address-presets-v2">
+                        <div className="preset-item">
+                          <Home size={14} />
+                          <span>Home</span>
+                          <div className="preset-actions">
+                            <button type="button" onClick={() => applySavedAddress('home')}>Apply</button>
+                            <button type="button" className="save" onClick={() => saveAddressPreset('home')}>Set</button>
+                          </div>
+                        </div>
+                        <div className="preset-item">
+                          <Briefcase size={14} />
+                          <span>Work</span>
+                          <div className="preset-actions">
+                            <button type="button" onClick={() => applySavedAddress('work')}>Apply</button>
+                            <button type="button" className="save" onClick={() => saveAddressPreset('work')}>Set</button>
+                          </div>
                         </div>
                       </div>
-                      <div className="preset-item">
-                        <Briefcase size={14} />
-                        <span>Work</span>
-                        <div className="preset-actions">
-                          <button type="button" onClick={() => applySavedAddress('work')}>Apply</button>
-                          <button type="button" className="save" onClick={() => saveAddressPreset('work')}>Set</button>
-                        </div>
+
+                      <div className="eloise-profile-map-section">
+                        <button
+                          type="button"
+                          className={`eloise-map-trigger ${profileMapOpen ? 'active' : ''}`}
+                          onClick={() => setProfileMapOpen((open) => !open)}
+                        >
+                          <MapPin size={14} />
+                          <span>{profileMapOpen ? 'Close Map Picker' : 'Pick Location on Map'}</span>
+                        </button>
+
+                        {profileMapOpen && (
+                          <div className="eloise-map-container-v2">
+                            <Suspense fallback={<div className="eloise-map-loading">Loading map...</div>}>
+                              <LeafletAddressPicker coordinates={selectedCoordinates} onPickCoordinates={handleMapPick} />
+                            </Suspense>
+                            <div className="map-hint">Drag or tap to set exact coordinates</div>
+                          </div>
+                        )}
                       </div>
                     </div>
+                  </div>
 
-                    <div className="eloise-profile-map-section">
-                      <button
-                        type="button"
-                        className={`eloise-map-trigger ${profileMapOpen ? 'active' : ''}`}
-                        onClick={() => setProfileMapOpen((open) => !open)}
-                      >
-                        <MapPin size={14} />
-                        <span>{profileMapOpen ? 'Close Map Picker' : 'Pick Location on Map'}</span>
+                  <footer className="eloise-profile-footer">
+                    <div className="action-row">
+                      <button type="button" className="detect-btn" onClick={handleDetectCurrentLocation} disabled={isLocatingAddress}>
+                        {isLocatingAddress ? <Loader2 size={14} className="eloise-spin" /> : <Crosshair size={14} />}
+                        <span>Locate Me</span>
                       </button>
-
-                      {profileMapOpen && (
-                        <div className="eloise-map-container-v2">
-                          <Suspense fallback={<div className="eloise-map-loading">Loading map...</div>}>
-                            <LeafletAddressPicker coordinates={selectedCoordinates} onPickCoordinates={handleMapPick} />
-                          </Suspense>
-                          <div className="map-hint">Drag or tap to set exact coordinates</div>
-                        </div>
-                      )}
+                      <button type="button" className="save-btn" onClick={handleSaveProfile} disabled={profileSaving}>
+                        {profileSaving ? <Loader2 size={14} className="eloise-spin" /> : <CheckCircle2 size={14} />}
+                        <span>Update Profile</span>
+                      </button>
                     </div>
-                  </div>
-                </div>
-
-                <footer className="eloise-profile-footer">
-                  <div className="action-row">
-                    <button type="button" className="detect-btn" onClick={handleDetectCurrentLocation} disabled={isLocatingAddress}>
-                      {isLocatingAddress ? <Loader2 size={14} className="eloise-spin" /> : <Crosshair size={14} />}
-                      <span>Locate Me</span>
+                    <button type="button" className="logout-btn" onClick={handleSignOutProfile}>
+                      <LogOut size={14} />
+                      <span>Sign Out</span>
                     </button>
-                    <button type="button" className="save-btn" onClick={handleSaveProfile} disabled={profileSaving}>
-                      {profileSaving ? <Loader2 size={14} className="eloise-spin" /> : <CheckCircle2 size={14} />}
-                      <span>Update Profile</span>
-                    </button>
-                  </div>
-                  <button type="button" className="logout-btn" onClick={handleSignOutProfile}>
-                    <LogOut size={14} />
-                    <span>Sign Out</span>
-                  </button>
-                </footer>
+                  </footer>
 
-                {profileError && <div className="eloise-status-msg error">{profileError}</div>}
-                {profileSuccess && <div className="eloise-status-msg success">{profileSuccess}</div>}
+                  {profileError && <div className="eloise-status-msg error">{profileError}</div>}
+                  {profileSuccess && <div className="eloise-status-msg success">{profileSuccess}</div>}
                 </section>
               </>
             )}
@@ -744,369 +813,429 @@ export function OfficialWebsiteScreen({ checkoutPage = false }) {
       )}
 
       {!checkoutPage && (
-      <section className="eloise-hero" id="top">
-        <div className="eloise-hero-text">
-          <div className="eloise-hero-tag">Est. 2024 · Specialty Coffee</div>
-          <h1>
-            Every Cup
-            <br />
-            is a <em>Story</em>
-            <br />
-            Worth Sipping
-          </h1>
-          <p>
-            Artisan coffee crafted with passion, seasonal pastries baked fresh daily, and a corner of the world made just for you.
-          </p>
-          <div className="eloise-hero-actions">
-            <a href="#menu" className="eloise-btn-primary">
-              <span>Explore Menu</span>
-              <ArrowRight size={14} />
-            </a>
-            <a href="#about" className="eloise-btn-ghost">
-              <span>Our Story</span>
-              <ArrowRight size={14} />
-            </a>
-          </div>
-        </div>
-        <div className="eloise-hero-visual">
-          <div className="eloise-hero-img-wrap">
-            <div className="eloise-hero-img-bg" />
-            {heroProduct?.image ? (
-              <img src={heroProduct.image} alt={heroProduct.name} className="eloise-hero-image" />
-            ) : (
-              <div className="eloise-hero-coffee-cup">☕</div>
-            )}
-            <div className="eloise-hero-badge">
-              <strong>4.9★</strong>
-              Guest Rating
-            </div>
-            <div className="eloise-hero-badge2">
-              <strong>{menuCount}+</strong>
-              Menu Items
+        <section className="eloise-hero" id="top">
+          <div className="eloise-hero-text">
+            <div className="eloise-hero-tag">Est. 2024 · Specialty Coffee</div>
+            <h1>
+              Every Cup
+              <br />
+              is a <em>Story</em>
+              <br />
+              Worth Sipping
+            </h1>
+            <p>
+              Artisan coffee crafted with passion, seasonal pastries baked fresh daily, and a corner of the world made just for you.
+            </p>
+            <div className="eloise-hero-actions">
+              <a href="#menu" className="eloise-btn-primary">
+                <span>Explore Menu</span>
+                <ArrowRight size={14} />
+              </a>
+              <a href="#about" className="eloise-btn-ghost">
+                <span>Our Story</span>
+                <ArrowRight size={14} />
+              </a>
             </div>
           </div>
-        </div>
-      </section>
-      )}
-
-      {!checkoutPage && (
-      <div className="eloise-marquee-wrap">
-        <div className="eloise-marquee-track">
-          {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, index) => (
-            <div className="eloise-marquee-item" key={`${item}-${index}`}>{item}</div>
-          ))}
-        </div>
-      </div>
-      )}
-
-      {!checkoutPage && (
-      <section className="eloise-about" id="about">
-        <div className="eloise-about-img eloise-reveal">
-          <div className="eloise-about-img-main">☕</div>
-          <div className="eloise-about-float">
-            <strong>100%</strong>
-            <span>Arabica Beans</span>
-          </div>
-        </div>
-        <div className="eloise-reveal">
-          <div className="eloise-section-label">About Us</div>
-          <h2>
-            More Than Coffee
-            <br />
-            It is a <em>Ritual</em>
-          </h2>
-          <p>
-            At Eloise Coffee, we believe every morning deserves a moment of calm. Our baristas are trained to coax the best from every bean while honoring the craft.
-          </p>
-          <p>
-            We source single-origin beans from sustainable farms, roast in small batches, and pair every cup with pastries made fresh each day before dawn.
-          </p>
-          <div className="eloise-about-stats">
-            <div>
-              <div className="eloise-stat-num">{menuCount}+</div>
-              <div className="eloise-stat-label">Menu Items</div>
-            </div>
-            <div>
-              <div className="eloise-stat-num">{happyCustomerCount}+</div>
-              <div className="eloise-stat-label">Happy Customers</div>
-            </div>
-            <div>
-              <div className="eloise-stat-num">5★</div>
-              <div className="eloise-stat-label">Avg Rating</div>
-            </div>
-          </div>
-        </div>
-      </section>
-      )}
-
-      {!checkoutPage && (
-      <section className="eloise-menu-section" id="menu">
-        <div className="eloise-section-header eloise-reveal">
-          <div className="eloise-section-label eloise-center-label">Our Menu</div>
-          <h2>
-            Crafted with Love,
-            <br />
-            Served with Pride
-          </h2>
-        </div>
-        <div className="eloise-menu-tabs eloise-reveal">
-          {menuTabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`eloise-tab ${resolvedActiveCategory === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveCategory(tab.id)}
-            >
-              {tab.name}
-            </button>
-          ))}
-        </div>
-        {loading && <div className="eloise-status-card">Loading menu...</div>}
-        {!loading && error && <div className="eloise-status-card eloise-status-error">{error}</div>}
-        {!loading && !error && (
-          <div className="eloise-menu-grid" id="menuGrid">
-            {filteredProducts.map((product, index) => {
-              const stockQty = normalizePositiveInteger(product.stockQty)
-              const soldOut = stockQty <= 0
-              const badge = soldOut ? 'Sold Out' : index < 3 ? 'Popular' : ''
-              const isAdded = Boolean(addedState[product.id])
-              const emoji = deriveProductEmoji(product.category, index)
-              return (
-                <div className="eloise-menu-card" key={product.id}>
-                  <div className="eloise-menu-card-img">
-                    {product.image ? (
-                      <img src={product.image} alt={product.name} className="eloise-menu-image" />
-                    ) : (
-                      <span>{emoji}</span>
-                    )}
-                    {badge ? <div className="eloise-menu-card-badge">{badge}</div> : null}
-                  </div>
-                  <div className="eloise-menu-card-body">
-                    <div className="eloise-menu-card-cat">{String(product.category ?? 'menu')}</div>
-                    <h3 className="line-clamp-1" title={product.name}>{product.name}</h3>
-                    <p className="line-clamp-2">{product.description || 'Handcrafted with quality ingredients and balanced flavor.'}</p>
-                    <div className="eloise-menu-card-footer">
-                      <span className="eloise-price">{formatMoney(product.basePrice)}</span>
-                      <button
-                        className="eloise-add-btn"
-                        onClick={() => handleAddToCart(product.id, product.stockQty)}
-                        disabled={soldOut}
-                        title={soldOut ? 'Out of stock' : 'Add to cart'}
-                      >
-                        {isAdded ? <CheckCircle2 size={16} /> : <Plus size={16} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-            {filteredProducts.length === 0 && (
-              <div className="eloise-status-card">No products found in this category.</div>
-            )}
-          </div>
-        )}
-      </section>
-      )}
-
-      {checkoutPage && (
-      <section className="eloise-checkout-section" id="checkout">
-        <div className="eloise-section-header eloise-reveal">
-          <div className="eloise-section-label eloise-center-label">Checkout</div>
-          <h2>Cart and Payment</h2>
-        </div>
-        <div className="eloise-checkout-grid">
-          <article className="eloise-checkout-card eloise-reveal">
-            <header className="eloise-checkout-card-header">
-              <p className="eloise-cart-label">Cart</p>
-              <h3>Eloise Selection</h3>
-            </header>
-            <div className="eloise-cart-body">
-              {cartLines.length === 0 && (
-                <div className="eloise-cart-empty">
-                  <ShoppingCart size={18} />
-                  <p>No items added yet.</p>
-                </div>
+          <div className="eloise-hero-visual">
+            <div className="eloise-hero-img-wrap">
+              <div className="eloise-hero-img-bg" />
+              {heroProduct?.image ? (
+                <img src={heroProduct.image} alt={heroProduct.name} className="eloise-hero-image" />
+              ) : (
+                <div className="eloise-hero-coffee-cup">☕</div>
               )}
-              {cartLines.map((line, index) => {
-                const productId = String(line.product.id)
+              <div className="eloise-hero-badge">
+                <strong>4.9★</strong>
+                Guest Rating
+              </div>
+              <div className="eloise-hero-badge2">
+                <strong>{menuCount}+</strong>
+                Menu Items
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!checkoutPage && (
+        <div className="eloise-marquee-wrap">
+          <div className="eloise-marquee-track">
+            {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, index) => (
+              <div className="eloise-marquee-item" key={`${item}-${index}`}>{item}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!checkoutPage && (
+        <section className="eloise-about" id="about">
+          <div className="eloise-about-img eloise-reveal">
+            <div className="eloise-about-img-main">☕</div>
+            <div className="eloise-about-float">
+              <strong>100%</strong>
+              <span>Arabica Beans</span>
+            </div>
+          </div>
+          <div className="eloise-reveal">
+            <div className="eloise-section-label">About Us</div>
+            <h2>
+              More Than Coffee
+              <br />
+              It is a <em>Ritual</em>
+            </h2>
+            <p>
+              At Eloise Coffee, we believe every morning deserves a moment of calm. Our baristas are trained to coax the best from every bean while honoring the craft.
+            </p>
+            <p>
+              We source single-origin beans from sustainable farms, roast in small batches, and pair every cup with pastries made fresh each day before dawn.
+            </p>
+            <div className="eloise-about-stats">
+              <div>
+                <div className="eloise-stat-num">{menuCount}+</div>
+                <div className="eloise-stat-label">Menu Items</div>
+              </div>
+              <div>
+                <div className="eloise-stat-num">{happyCustomerCount}+</div>
+                <div className="eloise-stat-label">Happy Customers</div>
+              </div>
+              <div>
+                <div className="eloise-stat-num">5★</div>
+                <div className="eloise-stat-label">Avg Rating</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!checkoutPage && (
+        <section className="eloise-menu-section" id="menu">
+          <div className="eloise-section-header eloise-reveal">
+            <div className="eloise-section-label eloise-center-label">Our Menu</div>
+            <h2>
+              Crafted with Love,
+              <br />
+              Served with Pride
+            </h2>
+          </div>
+          <div className="eloise-menu-tabs eloise-reveal">
+            {menuTabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={`eloise-tab ${resolvedActiveCategory === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveCategory(tab.id)}
+              >
+                {tab.name}
+              </button>
+            ))}
+          </div>
+          {loading && <div className="eloise-status-card">Loading menu...</div>}
+          {!loading && error && <div className="eloise-status-card eloise-status-error">{error}</div>}
+          {!loading && !error && (
+            <div className="eloise-menu-grid" id="menuGrid">
+              {filteredProducts.map((product, index) => {
+                const stockQty = normalizePositiveInteger(product.stockQty)
+                const soldOut = stockQty <= 0
+                const badge = soldOut ? 'Sold Out' : index < 3 ? 'Popular' : ''
+                const isAdded = Boolean(addedState[product.id])
+                const emoji = deriveProductEmoji(product.category, index)
                 return (
-                  <article className="eloise-cart-item" key={productId}>
-                    <div className="eloise-cart-item-thumb">
-                      {line.product.image ? (
-                        <img src={line.product.image} alt={line.product.name} />
+                  <div className="eloise-menu-card" key={product.id}>
+                    <div className="eloise-menu-card-img">
+                      {product.image ? (
+                        <img src={product.image} alt={product.name} className="eloise-menu-image" />
                       ) : (
-                        <span>{deriveProductEmoji(line.product.category, index)}</span>
+                        <span>{emoji}</span>
                       )}
+                      {badge ? <div className="eloise-menu-card-badge">{badge}</div> : null}
                     </div>
-                    <div className="eloise-cart-item-content">
-                      <p className="eloise-cart-item-name">{line.product.name}</p>
-                      <p className="eloise-cart-item-price">{formatMoney(line.product.basePrice)} each</p>
-                      <div className="eloise-cart-item-actions">
-                        <div className="eloise-qty-control">
-                          <button type="button" onClick={() => updateCartLineQuantity(productId, -1)}>
-                            <Minus size={14} />
-                          </button>
-                          <span>{line.quantity}</span>
-                          <button type="button" onClick={() => updateCartLineQuantity(productId, 1)}>
-                            <Plus size={14} />
-                          </button>
-                        </div>
-                        <button type="button" className="eloise-cart-remove" onClick={() => removeCartLine(productId)}>
-                          <Trash2 size={13} />
-                          <span>Remove</span>
+                    <div className="eloise-menu-card-body">
+                      <div className="eloise-menu-card-cat">{String(product.category ?? 'menu')}</div>
+                      <h3 className="line-clamp-1" title={product.name}>{product.name}</h3>
+                      <p className="line-clamp-2">{product.description || 'Handcrafted with quality ingredients and balanced flavor.'}</p>
+                      <div className="eloise-menu-card-footer">
+                        <span className="eloise-price">{formatMoney(product.basePrice)}</span>
+                        <button
+                          className="eloise-add-btn"
+                          onClick={() => handleAddToCart(product.id, product.stockQty)}
+                          disabled={soldOut}
+                          title={soldOut ? 'Out of stock' : 'Add to cart'}
+                        >
+                          {isAdded ? <CheckCircle2 size={16} /> : <Plus size={16} />}
                         </button>
                       </div>
                     </div>
-                    <p className="eloise-cart-item-total">
-                      {formatMoney(Number(line.product.basePrice ?? 0) * line.quantity)}
-                    </p>
-                  </article>
+                  </div>
                 )
               })}
-            </div>
-          </article>
-
-          <article className="eloise-checkout-card eloise-reveal">
-            <header className="eloise-checkout-card-header">
-              <p className="eloise-cart-label">Payment</p>
-              <h3>Customer Details</h3>
-            </header>
-            <div className="eloise-payment-card-body">
-              {customerReady && !customerSession?.id && (
-                <div className="eloise-login-required">
-                  <p>Login required to buy items.</p>
-                  <button
-                    type="button"
-                    className="ui-btn ui-btn-primary"
-                    onClick={openCustomerAuthPage}
-                  >
-                    <UserRound size={14} />
-                    <span>Login or Register</span>
-                  </button>
-                </div>
+              {filteredProducts.length === 0 && (
+                <div className="eloise-status-card">No products found in this category.</div>
               )}
-              <div className="eloise-cart-form">
-                <label>
-                  Name
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(event) => setCustomerName(event.target.value)}
-                    placeholder="Customer name"
-                  />
-                </label>
-                <label>
-                  Phone
-                  <input
-                    type="text"
-                    value={customerPhone}
-                    onChange={(event) => setCustomerPhone(event.target.value)}
-                    placeholder="Phone number"
-                  />
-                </label>
-                <label>
-                  Delivery Address
-                  <textarea
-                    rows={2}
-                    value={profileAddress}
-                    onChange={(event) => setProfileAddress(event.target.value)}
-                    placeholder="Delivery address"
-                  />
-                </label>
-                <div className="eloise-address-quick-picks">
-                  <button
-                    type="button"
-                    onClick={() => applySavedAddress('home')}
-                    disabled={!savedAddresses.home}
-                  >
-                    Home
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applySavedAddress('work')}
-                    disabled={!savedAddresses.work}
-                  >
-                    Work
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => saveAddressPreset('home')}
-                    disabled={!profileAddress.trim()}
-                  >
-                    Save as Home
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => saveAddressPreset('work')}
-                    disabled={!profileAddress.trim()}
-                  >
-                    Save as Work
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="eloise-location-btn"
-                  onClick={handleDetectCurrentLocation}
-                  disabled={isLocatingAddress}
-                >
-                  {isLocatingAddress ? <Loader2 size={14} className="eloise-spin" /> : <Crosshair size={14} />}
-                  <span>{isLocatingAddress ? 'Detecting current location...' : 'Use Current Location (Google Maps)'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="eloise-map-toggle eloise-map-toggle-checkout"
-                  onClick={() => setCheckoutMapOpen((open) => !open)}
-                >
-                  <MapPin size={14} />
-                  <span>{checkoutMapOpen ? 'Hide Map Picker' : 'Open Map Picker'}</span>
-                </button>
-                {checkoutMapOpen && (
-                  <div className="eloise-map-card">
-                    <Suspense fallback={<div className="eloise-map-loading">Loading map...</div>}>
-                      <LeafletAddressPicker coordinates={selectedCoordinates} onPickCoordinates={handleMapPick} />
-                    </Suspense>
-                    <p>Tap map to choose exact delivery point.</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {checkoutPage && (
+        <section className="eloise-checkout-section" id="checkout">
+          <div className="eloise-section-header eloise-reveal">
+            <div className="eloise-section-label eloise-center-label">Checkout</div>
+            <h2>Cart and Payment</h2>
+          </div>
+          <div className="eloise-checkout-grid">
+            <article className="eloise-checkout-card eloise-reveal">
+              <header className="eloise-checkout-card-header">
+                <p className="eloise-cart-label">Cart</p>
+                <h3>Eloise Selection</h3>
+              </header>
+              <div className="eloise-cart-body">
+                {cartLines.length === 0 && (
+                  <div className="eloise-cart-empty">
+                    <ShoppingCart size={18} />
+                    <p>No items added yet.</p>
                   </div>
                 )}
-                <label>
-                  Note
-                  <textarea
-                    rows={2}
-                    value={customerNote}
-                    onChange={(event) => setCustomerNote(event.target.value)}
-                    placeholder="Optional note"
-                  />
-                </label>
+                {cartLines.map((line, index) => {
+                  const productId = String(line.product.id)
+                  return (
+                    <article className="eloise-cart-item" key={productId}>
+                      <div className="eloise-cart-item-thumb">
+                        {line.product.image ? (
+                          <img src={line.product.image} alt={line.product.name} />
+                        ) : (
+                          <span>{deriveProductEmoji(line.product.category, index)}</span>
+                        )}
+                      </div>
+                      <div className="eloise-cart-item-content">
+                        <p className="eloise-cart-item-name">{line.product.name}</p>
+                        <p className="eloise-cart-item-price">{formatMoney(line.product.basePrice)} each</p>
+                        <div className="eloise-cart-item-actions">
+                          <div className="eloise-qty-control">
+                            <button type="button" onClick={() => updateCartLineQuantity(productId, -1)}>
+                              <Minus size={14} />
+                            </button>
+                            <span>{line.quantity}</span>
+                            <button type="button" onClick={() => updateCartLineQuantity(productId, 1)}>
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                          <button type="button" className="eloise-cart-remove" onClick={() => removeCartLine(productId)}>
+                            <Trash2 size={13} />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                      </div>
+                      <p className="eloise-cart-item-total">
+                        {formatMoney(Number(line.product.basePrice ?? 0) * line.quantity)}
+                      </p>
+                    </article>
+                  )
+                })}
               </div>
+            </article>
 
-              <WebsiteCheckoutPaymentPanel
-                paymentMethod={paymentMethod}
-                onPaymentMethodChange={(methodId) => {
-                  setPaymentMethod(methodId)
-                  setCheckoutError('')
-                  setCheckoutSuccess('')
-                }}
-                paymentConfig={paymentConfig}
-                roundedTotalAmount={roundedTotalAmount}
-                catalogCurrency={catalog.currency}
-                hasStaticKhqr={hasStaticKhqr}
-                checkoutError={checkoutError}
-                checkoutSuccess={checkoutSuccess}
-                latestOrder={latestOrder}
-                trackingEtaMinutes={trackingEtaMinutes}
-                trackingStage={trackingStage}
-                formatMoney={formatMoney}
-                subtotal={subtotal}
-                resolvedTaxRate={resolvedTaxRate}
-                taxAmount={taxAmount}
-                totalAmount={totalAmount}
-                onCheckout={handleCheckout}
-                checkoutDisabled={placingOrder || cartLines.length === 0 || !customerSession?.id}
-                checkoutButtonLabel={checkoutButtonLabel}
-              />
-            </div>
-          </article>
-        </div>
-      </section>
+            <article className="eloise-checkout-card eloise-reveal">
+              <header className="eloise-checkout-card-header">
+                <p className="eloise-cart-label">Payment</p>
+                <h3>Customer Details</h3>
+              </header>
+              <div className="eloise-payment-card-body">
+                {customerReady && !customerSession?.id && (
+                  <div className="eloise-login-required">
+                    <p>Login required to buy items.</p>
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-primary"
+                      onClick={openCustomerAuthPage}
+                    >
+                      <UserRound size={14} />
+                      <span>Login or Register</span>
+                    </button>
+                  </div>
+                )}
+                <div className="eloise-cart-form">
+                  <label>
+                    Name
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(event) => setCustomerName(event.target.value)}
+                      placeholder="Customer name"
+                    />
+                  </label>
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.875rem' }}>
+                      Order Type
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => setOrderType('takeaway')}
+                        style={{
+                          flex: 1,
+                          padding: '0.75rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #e5e7eb',
+                          backgroundColor: orderType === 'takeaway' ? '#f59e0b' : '#f3f4f6',
+                          color: orderType === 'takeaway' ? 'white' : '#374151',
+                          fontWeight: '500',
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <Briefcase size={14} style={{ display: 'inline', marginRight: '0.5rem' }} />
+                        Take Away
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOrderType('delivery')}
+                        style={{
+                          flex: 1,
+                          padding: '0.75rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #e5e7eb',
+                          backgroundColor: orderType === 'delivery' ? '#f59e0b' : '#f3f4f6',
+                          color: orderType === 'delivery' ? 'white' : '#374151',
+                          fontWeight: '500',
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <Truck size={14} style={{ display: 'inline', marginRight: '0.5rem' }} />
+                        Delivery
+                      </button>
+                    </div>
+                  </div>
+
+                  <label>
+                    Phone
+                    <input
+                      type="text"
+                      value={customerPhone}
+                      onChange={(event) => setCustomerPhone(event.target.value)}
+                      placeholder="Phone number"
+                    />
+                  </label>
+
+                  {orderType === 'delivery' && (
+                    <label>
+                      Delivery Phone
+                      <input
+                        type="text"
+                        value={deliveryPhone}
+                        onChange={(event) => setDeliveryPhone(event.target.value)}
+                        placeholder="Phone number for delivery driver"
+                      />
+                    </label>
+                  )}
+
+                  <label>
+                    Delivery Address
+                    <textarea
+                      rows={2}
+                      value={profileAddress}
+                      onChange={(event) => setProfileAddress(event.target.value)}
+                      placeholder="Delivery address"
+                    />
+                  </label>
+                  <div className="eloise-address-quick-picks">
+                    <button
+                      type="button"
+                      onClick={() => applySavedAddress('home')}
+                      disabled={!savedAddresses.home}
+                    >
+                      Home
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySavedAddress('work')}
+                      disabled={!savedAddresses.work}
+                    >
+                      Work
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveAddressPreset('home')}
+                      disabled={!profileAddress.trim()}
+                    >
+                      Save as Home
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveAddressPreset('work')}
+                      disabled={!profileAddress.trim()}
+                    >
+                      Save as Work
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="eloise-location-btn"
+                    onClick={handleDetectCurrentLocation}
+                    disabled={isLocatingAddress}
+                  >
+                    {isLocatingAddress ? <Loader2 size={14} className="eloise-spin" /> : <Crosshair size={14} />}
+                    <span>{isLocatingAddress ? 'Detecting current location...' : 'Use Current Location (Google Maps)'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="eloise-map-toggle eloise-map-toggle-checkout"
+                    onClick={() => setCheckoutMapOpen((open) => !open)}
+                  >
+                    <MapPin size={14} />
+                    <span>{checkoutMapOpen ? 'Hide Map Picker' : 'Open Map Picker'}</span>
+                  </button>
+                  {checkoutMapOpen && (
+                    <div className="eloise-map-card">
+                      <Suspense fallback={<div className="eloise-map-loading">Loading map...</div>}>
+                        <LeafletAddressPicker coordinates={selectedCoordinates} onPickCoordinates={handleMapPick} />
+                      </Suspense>
+                      <p>Tap map to choose exact delivery point.</p>
+                    </div>
+                  )}
+                  <label>
+                    Note
+                    <textarea
+                      rows={2}
+                      value={customerNote}
+                      onChange={(event) => setCustomerNote(event.target.value)}
+                      placeholder="Optional note"
+                    />
+                  </label>
+                </div>
+
+                <WebsiteCheckoutPaymentPanel
+                  paymentMethod={paymentMethod}
+                  onPaymentMethodChange={(methodId) => {
+                    setPaymentMethod(methodId)
+                    setCheckoutError('')
+                    setCheckoutSuccess('')
+                  }}
+                  paymentConfig={paymentConfig}
+                  roundedTotalAmount={roundedTotalAmount}
+                  catalogCurrency={catalog.currency}
+                  hasStaticKhqr={hasStaticKhqr}
+                  checkoutError={checkoutError}
+                  checkoutSuccess={checkoutSuccess}
+                  latestOrder={latestOrder}
+                  trackingEtaMinutes={trackingEtaMinutes}
+                  trackingStage={trackingStage}
+                  formatMoney={formatMoney}
+                  subtotal={subtotal}
+                  resolvedTaxRate={resolvedTaxRate}
+                  taxAmount={taxAmount}
+                  totalAmount={totalAmount}
+                  onCheckout={handleCheckout}
+                  checkoutDisabled={placingOrder || cartLines.length === 0 || !customerSession?.id}
+                  checkoutButtonLabel={checkoutButtonLabel}
+                />
+              </div>
+            </article>
+          </div>
+        </section>
       )}
       {!checkoutPage && <WebsiteMarketingSections todayName={todayName} />}
     </div>

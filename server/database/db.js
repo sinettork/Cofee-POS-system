@@ -68,12 +68,35 @@ db.exec(`
     status TEXT NOT NULL,
     payment_status TEXT NOT NULL,
     kitchen_status TEXT NOT NULL,
+    delivery_status TEXT DEFAULT 'pending',
+    delivery_address TEXT DEFAULT '',
+    delivery_phone TEXT DEFAULT '',
+    delivery_note TEXT DEFAULT '',
     created_at TEXT NOT NULL,
     subtotal REAL NOT NULL DEFAULT 0,
     tax REAL NOT NULL DEFAULT 0,
     discount REAL NOT NULL DEFAULT 0,
     total REAL NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL UNIQUE,
+    driver_name TEXT DEFAULT '',
+    driver_phone TEXT DEFAULT '',
+    assigned_at TEXT,
+    picked_up_at TEXT,
+    delivered_at TEXT,
+    delivery_note TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_deliveries_order_id
+    ON deliveries(order_id);
+
+  CREATE INDEX IF NOT EXISTS idx_orders_delivery_status
+    ON orders(delivery_status);
 
   CREATE TABLE IF NOT EXISTS order_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -921,7 +944,7 @@ export function getBootstrapData() {
     .prepare(`
       SELECT order_number, created_at, customer_name, status, subtotal, payment_status, currency
       FROM orders
-      WHERE status IN ('Done', 'Canceled')
+      WHERE status IN ('Closed', 'Done', 'Canceled')
       ORDER BY datetime(created_at) DESC
       LIMIT 60
     `)
@@ -998,6 +1021,13 @@ export function getBootstrapData() {
 
 export function createOrder(payload) {
   const nextOrderNumber = getNextOrderNumber()
+  const initialStatus = String(payload?.status ?? 'Active').trim() || 'Active'
+  const initialKitchenStatus =
+    initialStatus === 'Closed' || initialStatus === 'Done'
+      ? 'All Done'
+      : initialStatus === 'Canceled'
+        ? 'Canceled'
+        : 'On Kitchen Hand'
   const findProductStock = db.prepare('SELECT id, name, stock_qty FROM products WHERE id = ?')
   const deductStock = db.prepare(`
     UPDATE products
@@ -1058,9 +1088,9 @@ export function createOrder(payload) {
       payload.paymentCurrency ?? payload.currency ?? 'USD',
       payload.amountReceived ?? payload.total ?? 0,
       payload.changeAmount ?? 0,
-      'Active',
+      initialStatus,
       payload.paymentStatus ?? 'Unpaid',
-      'On Kitchen Hand',
+      initialKitchenStatus,
       createdAtIso,
       payload.subtotal,
       payload.tax,
@@ -1371,6 +1401,137 @@ export function updateKhqrTransactionStatus(md5, payload) {
     )
     .run(status, paidAt, lastCheckedAt, responseJson, String(md5))
   return result.changes > 0
+}
+
+// Delivery Management Functions
+export function getDeliveryQueue(limit = 50) {
+  const rows = db
+    .prepare(`
+      SELECT
+        o.id,
+        o.order_number,
+        o.customer_name,
+        o.delivery_address,
+        o.delivery_phone,
+        o.delivery_note,
+        o.status,
+        o.kitchen_status,
+        o.delivery_status,
+        o.created_at,
+        d.id as delivery_id,
+        d.driver_name,
+        d.driver_phone,
+        d.assigned_at,
+        d.picked_up_at,
+        d.delivered_at
+      FROM orders o
+      LEFT JOIN deliveries d ON o.id = d.order_id
+      WHERE o.order_type = 'Delivery'
+      ORDER BY o.created_at DESC
+      LIMIT ?
+    `)
+    .all(limit)
+  return rows.map((row) => ({
+    ...row,
+    created_at: row.created_at ? row.created_at : '',
+  }))
+}
+
+export function assignDriver(orderId, driverName, driverPhone) {
+  const safeDriverName = String(driverName ?? '').trim()
+  const safeDriverPhone = String(driverPhone ?? '').trim()
+  const assignedAt = new Date().toISOString()
+
+  const existingDelivery = db
+    .prepare('SELECT id FROM deliveries WHERE order_id = ?')
+    .get(orderId)
+
+  if (existingDelivery) {
+    const result = db
+      .prepare(`
+        UPDATE deliveries
+        SET driver_name = ?, driver_phone = ?, assigned_at = ?
+        WHERE order_id = ?
+      `)
+      .run(safeDriverName, safeDriverPhone, assignedAt, orderId)
+    return result.changes > 0
+  } else {
+    const now = new Date().toISOString()
+    db.prepare(`
+      INSERT INTO deliveries (
+        order_id, driver_name, driver_phone, assigned_at, created_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run(orderId, safeDriverName, safeDriverPhone, assignedAt, now)
+    return true
+  }
+}
+
+export function updateDeliveryStatus(orderId, deliveryStatus) {
+  const validStatuses = new Set([
+    'pending',
+    'ready_for_delivery',
+    'out_for_delivery',
+    'delivered',
+  ])
+  const safeStatus = String(deliveryStatus ?? 'pending').trim()
+
+  if (!validStatuses.has(safeStatus)) {
+    throw createDomainError('INVALID_DELIVERY_STATUS', `Invalid delivery status: ${safeStatus}`)
+  }
+
+  const updates = {
+    picked_up_at:
+      safeStatus === 'out_for_delivery' ? new Date().toISOString() : null,
+    delivered_at:
+      safeStatus === 'delivered' ? new Date().toISOString() : null,
+  }
+
+  const result = db
+    .prepare(`
+      UPDATE orders SET delivery_status = ? WHERE id = ?
+    `)
+    .run(safeStatus, orderId)
+
+  if (safeStatus !== 'pending') {
+    db.prepare(`
+      UPDATE deliveries
+      SET
+        picked_up_at = COALESCE(?, picked_up_at),
+        delivered_at = COALESCE(?, delivered_at)
+      WHERE order_id = ?
+    `).run(updates.picked_up_at, updates.delivered_at, orderId)
+  }
+
+  return result.changes > 0
+}
+
+export function getOrderById(orderId) {
+  const row = db
+    .prepare(`
+      SELECT
+        id,
+        order_number,
+        customer_name,
+        table_name,
+        order_type,
+        payment_method,
+        status,
+        payment_status,
+        kitchen_status,
+        delivery_status,
+        delivery_address,
+        delivery_phone,
+        delivery_note,
+        created_at,
+        subtotal,
+        tax,
+        discount,
+        total
+      FROM orders
+      WHERE id = ?
+    `)
+    .get(orderId)
+  return row || null
 }
 
 function getNextOrderNumber() {

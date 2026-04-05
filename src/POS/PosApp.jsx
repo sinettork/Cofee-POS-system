@@ -18,6 +18,7 @@ import {
 } from '@shared/api/client'
 import { MainDrawer } from './components/MainDrawer'
 import { ActivityScreen } from './screens/ActivityScreen'
+import { DeliveryScreen } from './screens/DeliveryScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { ManageScreen } from './screens/ManageScreen'
 import { PosScreen } from './screens/PosScreen'
@@ -36,8 +37,8 @@ import {
 } from './constants/uiData'
 
 const ROLE_PAGE_ACCESS = {
-  manager: ['pos', 'activity', 'report', 'inventory', 'teams', 'settings'],
-  cashier: ['pos', 'activity'],
+  manager: ['pos', 'activity', 'delivery', 'report', 'inventory', 'teams', 'settings'],
+  cashier: ['pos', 'activity', 'delivery'],
 }
 
 function getAllowedPagesByRole(role) {
@@ -86,6 +87,8 @@ export default function PosApp() {
     taxRate: 10,
     receiptFooter: true,
     defaultService: 'Dine In',
+    currency: 'USD',
+    exchangeRate: 4000,
   })
   const [authToken, setAuthToken] = useState(() => getStoredAuthToken())
   const [currentUser, setCurrentUser] = useState(null)
@@ -323,6 +326,8 @@ export default function PosApp() {
             tableGroups={appData.tableGroups}
             trackingOrders={appData.trackingOrders}
             taxRate={Math.max(0, Number(appSettings.taxRate ?? 10)) / 100}
+            currency={appSettings.currency ?? 'USD'}
+            exchangeRate={Number(appSettings.exchangeRate ?? 4000)}
             onOpenMenu={() => setIsMenuOpen(true)}
             onNavigate={setPage}
             onPlaceOrder={handlePlaceOrder}
@@ -341,6 +346,9 @@ export default function PosApp() {
             onUpdateOrderStatus={handleOrderStatusUpdate}
             onAction={handleAction}
           />
+        )}
+        {page === 'delivery' && allowedPages.includes('delivery') && (
+          <DeliveryScreen />
         )}
         {page === 'report' && allowedPages.includes('report') && (
           <ReportScreen

@@ -8,12 +8,14 @@ import {
   Package,
   Sandwich,
   Settings,
+  Truck,
   Users,
 } from 'lucide-react'
 
 export const PAGE_ITEMS = [
   { id: 'pos', name: 'Point of Sales', icon: Coffee },
   { id: 'activity', name: 'Activity', icon: Activity },
+  { id: 'delivery', name: 'Delivery', icon: Truck },
   { id: 'report', name: 'Report', icon: FileText },
 ]
 

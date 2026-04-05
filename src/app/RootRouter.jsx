@@ -3,6 +3,7 @@ import PosApp from '@POS/PosApp.jsx'
 import { CustomerAuthScreen } from '@Website/screens/CustomerAuthScreen.jsx'
 import { OfficialWebsiteScreen } from '@Website/screens/OfficialWebsiteScreen.jsx'
 import { OnlineOrderScreen } from '@Website/screens/OnlineOrderScreen.jsx'
+import { DeliveryTrackingScreen } from '@Website/screens/DeliveryTrackingScreen.jsx'
 
 class RootErrorBoundary extends Component {
   constructor(props) {
@@ -58,6 +59,7 @@ export function RootRouter() {
   const isPosPage = pathname.startsWith('/pos') || pathname.startsWith('/admin')
   const isCheckoutPage = pathname.startsWith('/cart') || pathname.startsWith('/checkout')
   const isCustomerAuthPage = pathname.startsWith('/account') || pathname.startsWith('/customer-login')
+  const isDeliveryTrackingPage = pathname.startsWith('/delivery-tracking')
 
   return (
     <RootErrorBoundary>
@@ -65,6 +67,8 @@ export function RootRouter() {
         <CustomerAuthScreen />
       ) : isOnlineOrderPage ? (
         <OnlineOrderScreen />
+      ) : isDeliveryTrackingPage ? (
+        <DeliveryTrackingScreen />
       ) : isPosPage ? (
         <PosApp />
       ) : (

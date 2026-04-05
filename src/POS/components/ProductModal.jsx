@@ -34,7 +34,7 @@ export function ProductModal({
       <section className="ui-modal-card relative z-10 flex max-h-[92vh] w-full max-w-[520px] flex-col overflow-hidden rounded-[2.5rem]">
         <header className="flex items-center justify-between border-b border-stone-100 px-8 py-6">
           <h3 className="text-xl font-black text-stone-800 uppercase tracking-tight">Detail Menu</h3>
-          <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-50 text-stone-400 hover:bg-stone-800 hover:text-white transition-all">
+          <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-50 text-stone-400 transition-colors hover:bg-[#faf4ef] hover:text-[var(--ui-primary)]">
             <X size={20} />
           </button>
         </header>
@@ -42,7 +42,7 @@ export function ProductModal({
           <div className="flex gap-6">
             <img src={product.image} alt={product.name} className="h-28 w-28 rounded-3xl border border-stone-100 object-cover shadow-sm" />
             <div className="flex-1 min-w-0">
-              <span className="inline-block rounded-full bg-[#1C8370]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#1C8370]">
+              <span className="inline-block rounded-full bg-[#f3fbf8] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#1C8370]">
                 {product.label}
               </span>
               <h2 className="mt-2 truncate text-2xl font-black text-stone-900 leading-tight" title={product.name}>{product.name}</h2>
@@ -67,17 +67,17 @@ export function ProductModal({
                         onClick={() =>
                           setSelectedOptions((previous) => ({ ...previous, [group]: option }))
                         }
-                        className={`rounded-2xl border px-4 py-2.5 text-xs font-bold transition-all ${
+                        className={`rounded-2xl border px-4 py-2.5 text-xs font-bold transition-colors ${
                           active
-                            ? 'border-[#7c4a32] bg-[#7c4a32] text-white shadow-lg shadow-amber-900/10'
-                            : 'border-stone-200 text-stone-500 hover:bg-stone-50'
+                            ? 'border-[var(--ui-primary)]/30 bg-[#f7efe9] text-[var(--ui-primary)]'
+                            : 'border-stone-200 text-stone-500 hover:bg-[#faf4ef]'
                         }`}
                       >
                         <span className="inline-flex items-center gap-1.5">
                           {active && <CheckCircle2 size={14} />}
                           {option.name}
                           {option.price > 0 ? (
-                            <span className={active ? 'text-white/70' : 'text-stone-400'}>
+                            <span className={active ? 'text-[var(--ui-primary)]/60' : 'text-stone-400'}>
                               (+{displayAmount(option.price)})
                             </span>
                           ) : ''}
@@ -101,11 +101,11 @@ export function ProductModal({
           </div>
         </div>
         <footer className="space-y-4 border-t border-stone-100 bg-stone-50/30 p-8">
-          <div className="mx-auto flex w-full max-w-[180px] items-center justify-between rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm">
+          <div className="mx-auto flex w-full max-w-[180px] items-center justify-between rounded-2xl border border-stone-200 bg-white p-1.5">
             <button
               onClick={() => setQuantity((current) => Math.max(1, current - 1))}
               disabled={isOutOfStock}
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-900"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-[#faf4ef] hover:text-[var(--ui-primary)]"
             >
               <Minus size={18} />
             </button>
@@ -113,7 +113,7 @@ export function ProductModal({
             <button
               onClick={() => setQuantity((current) => Math.min(safeMaxQuantity, current + 1))}
               disabled={isOutOfStock || quantity >= safeMaxQuantity}
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-900"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-[#faf4ef] hover:text-[var(--ui-primary)]"
             >
               <Plus size={18} />
             </button>

@@ -3,11 +3,11 @@ import { LogOut, X } from 'lucide-react'
 export function MainDrawer({ open, currentPage, items, currentUser, onNavigate, onClose, onSignOut }) {
   const roleLabel = String(currentUser?.role ?? 'cashier')
   const displayName = String(currentUser?.displayName ?? 'Tenant User')
-  const primaryItems = items.filter((item) => ['pos', 'activity', 'report'].includes(item.id))
-  const manageItems = items.filter((item) => ['inventory', 'teams', 'settings'].includes(item.id))
-  const extraItems = items.filter(
-    (item) => !['pos', 'activity', 'report', 'inventory', 'teams', 'settings'].includes(item.id),
-  )
+  const orderedNavItems = [
+    ...items.filter((item) => ['pos', 'activity', 'delivery', 'report'].includes(item.id)),
+    ...items.filter((item) => ['inventory', 'teams', 'settings'].includes(item.id)),
+    ...items.filter((item) => !['pos', 'activity', 'delivery', 'report', 'inventory', 'teams', 'settings'].includes(item.id)),
+  ]
 
   const renderNavCard = (item, { compact = false } = {}) => {
     const Icon = item.icon
@@ -16,24 +16,21 @@ export function MainDrawer({ open, currentPage, items, currentUser, onNavigate, 
       <button
         key={item.id}
         onClick={() => onNavigate(item.id)}
-        className={`ui-btn flex w-full items-center justify-start gap-3 rounded-xl border px-3 text-sm transition-all ${
-          compact ? 'py-2.5' : 'py-3'
-        } ${
-          isActive
-            ? 'border-[#7c4a32]/30 bg-[#7c4a32]/10 text-[var(--ui-primary)] shadow-sm'
-            : 'border-stone-200 bg-white text-stone-700 shadow-sm hover:border-stone-300 hover:bg-stone-50'
-        }`}
+        className={`flex w-full appearance-none items-center justify-start gap-3.5 rounded-2xl px-3.5 text-sm transition-colors ${compact ? 'py-3' : 'py-3.5'
+          } ${isActive
+            ? 'bg-[#f6eee8] text-[var(--ui-primary)]'
+            : 'bg-transparent text-stone-700 hover:bg-[#faf4ef]'
+          }`}
       >
         <span
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-            isActive
-              ? 'border-[#7c4a32]/20 bg-[#7c4a32]/15 text-[var(--ui-primary)]'
-              : 'border-stone-200 bg-stone-50 text-stone-500'
-          }`}
+          className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${isActive
+              ? 'bg-[var(--ui-primary)] text-white'
+              : 'bg-stone-50 text-stone-400 ring-1 ring-stone-100'
+            }`}
         >
           <Icon size={16} />
         </span>
-        <span className="font-semibold tracking-tight">{item.name}</span>
+        <span className={`tracking-tight ${isActive ? 'font-semibold' : 'font-medium'}`}>{item.name}</span>
       </button>
     )
   }
@@ -46,9 +43,8 @@ export function MainDrawer({ open, currentPage, items, currentUser, onNavigate, 
       />
 
       <aside
-        className={`absolute left-0 top-0 h-full w-[290px] border-r border-slate-200 bg-white p-4 shadow-[0_18px_40px_rgba(0,0,0,0.15)] transition-transform ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`absolute left-0 top-0 h-full w-[290px] border-r border-slate-200 bg-white p-4 shadow-[0_18px_40px_rgba(0,0,0,0.15)] transition-transform ${open ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="mb-5 flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5">
           <div>
@@ -63,25 +59,9 @@ export function MainDrawer({ open, currentPage, items, currentUser, onNavigate, 
           </button>
         </div>
 
-        <nav className="space-y-3">
-          <div>
-            <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">POS</p>
-            <div className="space-y-1.5">
-              {primaryItems.map((item) => renderNavCard(item, { compact: true }))}
-            </div>
-          </div>
-
-          {manageItems.length > 0 && (
-            <div className="ui-surface rounded-2xl p-2">
-              <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-[0.16em] text-stone-400">Management</p>
-              <div className="space-y-1.5">
-                {manageItems.map((item) => renderNavCard(item, { compact: true }))}
-              </div>
-            </div>
-          )}
+        <nav className="space-y-1">
+          {orderedNavItems.map((item) => renderNavCard(item, { compact: true }))}
         </nav>
-
-        {extraItems.length > 0 && <nav className="mt-2 space-y-1.5">{extraItems.map((item) => renderNavCard(item))}</nav>}
 
         <button
           onClick={() => {
