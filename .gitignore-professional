@@ -1,0 +1,58 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Production
+/dist
+/build
+/out
+
+# Development
+.DS_Store
+*.lo
+*.log
+*.suo
+*.sln
+.vs/
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+/coverage
+.nyc_output
+
+# Misc
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.cache/
+.turbo/
+turbo.json.local
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Dependencies (lock files for review)
+yarn.lock
+pnpm-lock.yaml
+
+# IDE
+.vscode/settings.json
+.vscode/launch.json
+
+# AI/Tools
+.ai/
