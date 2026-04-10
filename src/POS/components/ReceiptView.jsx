@@ -4,6 +4,7 @@ export function ReceiptView({ data, onNewOrder }) {
   const createdAtLabel =
     data?.createdAt instanceof Date ? data.createdAt.toLocaleString() : new Date().toLocaleString()
   const items = Array.isArray(data?.items) ? data.items : []
+  const paymentCurrency = data?.paymentCurrency ?? data?.currency
 
   return (
     <div className="receipt-root rounded-xl border border-slate-200 bg-white p-4 font-mono text-sm text-slate-800">
@@ -54,16 +55,19 @@ export function ReceiptView({ data, onNewOrder }) {
         </div>
       </div>
 
-      <p className="mt-3 text-xs">Paid by: {data?.paymentMethod ?? 'N/A'}</p>
+      <p className="mt-3 text-xs">
+        Paid by: {data?.paymentMethod ?? 'N/A'}
+        {paymentCurrency && paymentCurrency !== data?.currency ? ` (${paymentCurrency})` : ''}
+      </p>
       {data?.paymentMethod === 'Cash' && (
         <>
-          <p className="text-xs">Received: {formatCurrency(data?.amountReceived ?? 0, data?.currency)}</p>
-          <p className="text-xs">Change: {formatCurrency(data?.changeAmount ?? 0, data?.currency)}</p>
+          <p className="text-xs">Received: {formatCurrency(data?.amountReceived ?? 0, paymentCurrency)}</p>
+          <p className="text-xs">Change: {formatCurrency(data?.changeAmount ?? 0, paymentCurrency)}</p>
         </>
       )}
       {data?.paymentMethod === 'KHQR' && (
         <>
-          <p className="text-xs">Received: {formatCurrency(data?.amountReceived ?? data?.total ?? 0, data?.currency)}</p>
+          <p className="text-xs">Received: {formatCurrency(data?.amountReceived ?? data?.total ?? 0, paymentCurrency)}</p>
           {data?.receiverName ? <p className="text-xs">Receiver: {data.receiverName}</p> : null}
           {data?.receiverAccount ? <p className="text-xs">Account: {data.receiverAccount}</p> : null}
         </>

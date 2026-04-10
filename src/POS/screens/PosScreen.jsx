@@ -1,6 +1,5 @@
 import {
   Bell,
-  CalendarDays,
   Check,
   Clock3,
   Coffee,
@@ -15,18 +14,40 @@ import {
   Search,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react'
 import { useDeferredValue, useEffect, useMemo, useRef, useState, startTransition } from 'react'
+import { CartNoteModal } from '../components/CartNoteModal'
 import { PaymentModal } from '../components/PaymentModal'
 import { ProductModal } from '../components/ProductModal'
-import { HeaderChip, RailButton } from '../components/common'
+import { DateChip, HeaderChip, RailButton } from '../components/common'
 import { CATEGORY_ITEMS, PAGE_ITEMS, PRODUCT_ITEMS, TRACKING_ORDERS } from '../constants/uiData'
-import { formatCurrency, formatDate, formatTime } from '@shared/utils/format'
+import { convertCurrency, formatCurrency, formatTime } from '@shared/utils/format'
 
 const DEFAULT_CURRENCY = 'USD'
 
+function normalizeCartNote(note) {
+  return String(note ?? '').trim()
+}
+
+function buildCartSignature(product, selectedOptions = {}, notes = '') {
+  const optionSignature = Object.entries(selectedOptions)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([group, option]) => `${group}:${option?.name ?? ''}:${Number(option?.price ?? 0)}`)
+    .join('|')
+  return [String(product?.id ?? ''), optionSignature, normalizeCartNote(notes)].join('::')
+}
+
+function isEditableTarget(target) {
+  const element = target instanceof HTMLElement ? target : null
+  if (!element) return false
+  const tagName = element.tagName.toLowerCase()
+  return element.isContentEditable || ['input', 'textarea', 'select'].includes(tagName)
+}
+
 export function PosScreen({
   now,
+  selectedDate = now,
   pageItems = PAGE_ITEMS,
   canOpenInventory = false,
   onOpenMenu,
@@ -40,6 +61,7 @@ export function PosScreen({
   exchangeRate = 4000,
   onPlaceOrder,
   onAction,
+  onDateChange,
   onSignOut,
 }) {
   const [activeCategory, setActiveCategory] = useState('all')
@@ -54,6 +76,7 @@ export function PosScreen({
   const [discountRate, setDiscountRate] = useState(0)
   const [paymentMethod, setPaymentMethod] = useState('Cash')
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [noteEditorCartId, setNoteEditorCartId] = useState(null)
   const [trackingSearchOpen, setTrackingSearchOpen] = useState(false)
   const [trackingKeyword, setTrackingKeyword] = useState('')
   const [trackingSort, setTrackingSort] = useState('latest')
@@ -96,11 +119,21 @@ export function PosScreen({
 
   const deferredSearch = useDeferredValue(searchQuery)
   const keyword = deferredSearch.trim().toLowerCase()
-  const filteredProducts = products.filter((product) => {
-    const matchesCategory = activeCategory === 'all' || product.category === activeCategory
-    const matchesSearch = product.name.toLowerCase().includes(keyword)
-    return matchesCategory && matchesSearch
-  })
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((product) => {
+        const matchesCategory = activeCategory === 'all' || product.category === activeCategory
+        const matchesSearch =
+          !keyword ||
+          [product.name, product.label, product.category]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(keyword)
+        return matchesCategory && matchesSearch
+      }),
+    [activeCategory, keyword, products],
+  )
   const allTables = useMemo(() => {
     const values = tableGroups.flatMap((group) =>
       (group.tables ?? []).map((table) => {
@@ -122,6 +155,12 @@ export function PosScreen({
   const tax = subtotal * resolvedTaxRate
   const discount = subtotal * discountRate
   const total = subtotal + tax - discount
+  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+  const hasSearchQuery = Boolean(searchQuery.trim())
+  const activeCategoryMeta = mergedCategories.find((item) => item.id === activeCategory)
+  const resultsLabel = hasSearchQuery
+    ? `${filteredProducts.length} ${filteredProducts.length === 1 ? 'result' : 'results'} for "${searchQuery.trim()}"`
+    : `${filteredProducts.length} ${filteredProducts.length === 1 ? 'item' : 'items'} in ${activeCategoryMeta?.name ?? 'Menu'}`
   const resolvedCurrency = ['USD', 'KHR'].includes(currency) ? currency : 'USD'
   const resolvedExchangeRate = Number(exchangeRate ?? 4000)
   const formatMoney = (amount) => formatCurrency(amount, resolvedCurrency, resolvedExchangeRate)
@@ -135,6 +174,8 @@ export function PosScreen({
     cart.reduce((sum, item) => (item.product.id === productId ? sum + item.quantity : sum), 0)
   const availableStockForProduct = (product) =>
     Math.max(0, Math.floor(resolveStockQty(product) - cartQtyForProduct(product.id)))
+  const quickAddProduct =
+    filteredProducts.find((product) => availableStockForProduct(product) > 0) ?? null
   const filteredTrackingOrders = trackingOrders
     .filter((order) => {
       const keyword = trackingKeyword.trim().toLowerCase()
@@ -180,6 +221,11 @@ export function PosScreen({
     })
   const stockAlertCount = stockAlerts.length
   const stockAlertPreview = stockAlerts.slice(0, 5)
+  const serviceLabel = orderType === 'Take Away' ? 'Pickup Counter' : tableName
+  const selectedCartNoteItem = useMemo(
+    () => cart.find((item) => item.cartId === noteEditorCartId) ?? null,
+    [cart, noteEditorCartId],
+  )
 
   useEffect(() => {
     if (!stockAlertOpen) return undefined
@@ -222,6 +268,42 @@ export function PosScreen({
     return () => window.removeEventListener('mousedown', handlePointerDown)
   }, [])
 
+  useEffect(() => {
+    productSearchInputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.defaultPrevented) return
+      if (paymentModalOpen || selectedProduct) return
+      const pressedKey = String(event.key ?? '').toLowerCase()
+      if ((event.ctrlKey || event.metaKey) && pressedKey === 'k') {
+        event.preventDefault()
+        productSearchInputRef.current?.focus()
+        productSearchInputRef.current?.select()
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && pressedKey === 'enter') {
+        event.preventDefault()
+        openPaymentModal()
+        return
+      }
+      if (event.altKey && pressedKey === 'n') {
+        event.preventDefault()
+        customerInputRef.current?.focus()
+        customerInputRef.current?.select()
+        return
+      }
+      if (!isEditableTarget(event.target) && pressedKey === '/') {
+        event.preventDefault()
+        productSearchInputRef.current?.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  })
+
   const goToInventoryFromAlert = () => {
     setStockAlertOpen(false)
     onNavigate('inventory')
@@ -249,21 +331,45 @@ export function PosScreen({
     const safeQty = Math.max(1, Math.min(quantity, availableQty))
     const optionTotal = Object.values(selectedOptions).reduce((sum, item) => sum + item.price, 0)
     const itemPrice = product.basePrice + optionTotal
+    const normalizedNotes = normalizeCartNote(notes)
+    const nextSignature = buildCartSignature(product, selectedOptions, normalizedNotes)
     const cartId = `cart-${cartIdRef.current}`
     cartIdRef.current += 1
+    let mergedIntoExisting = false
 
-    setCart((previous) => [
-      ...previous,
-      {
-        cartId,
-        product,
-        selectedOptions,
-        notes,
-        quantity: safeQty,
-        itemPrice,
-        totalPrice: itemPrice * safeQty,
-      },
-    ])
+    setCart((previous) => {
+      const match = previous.find(
+        (item) => buildCartSignature(item.product, item.selectedOptions, item.notes) === nextSignature,
+      )
+      if (match) {
+        mergedIntoExisting = true
+        return previous.map((item) =>
+          item.cartId === match.cartId
+            ? {
+                ...item,
+                quantity: item.quantity + safeQty,
+                totalPrice: (item.quantity + safeQty) * item.itemPrice,
+              }
+            : item,
+        )
+      }
+
+      return [
+        ...previous,
+        {
+          cartId,
+          product,
+          selectedOptions,
+          notes: normalizedNotes,
+          quantity: safeQty,
+          itemPrice,
+          totalPrice: itemPrice * safeQty,
+        },
+      ]
+    })
+    if (mergedIntoExisting) {
+      onAction?.(`${product.name} quantity updated in current order.`)
+    }
     if (safeQty < quantity) {
       onAction?.(`Only ${availableQty} in stock for ${product.name}. Added ${safeQty}.`)
     }
@@ -308,13 +414,58 @@ export function PosScreen({
   const updateCartNotes = (cartId) => {
     const target = cart.find((item) => item.cartId === cartId)
     if (!target) return
-    const nextNote = window.prompt('Update note for this item:', target.notes ?? '')
-    if (nextNote === null) return
-    setCart((previous) =>
-      previous.map((item) => (item.cartId === cartId ? { ...item, notes: nextNote.trim() } : item)),
-    )
-    if (nextNote.trim()) {
+    setNoteEditorCartId(cartId)
+  }
+
+  const handleSaveCartNote = (cartId, nextNote) => {
+    const normalizedNote = normalizeCartNote(nextNote)
+    let changeSummary = 'unchanged'
+
+    setCart((previous) => {
+      const target = previous.find((item) => item.cartId === cartId)
+      if (!target) return previous
+
+      const currentNote = normalizeCartNote(target.notes)
+      if (currentNote === normalizedNote) return previous
+
+      const nextSignature = buildCartSignature(target.product, target.selectedOptions, normalizedNote)
+      const mergeTarget = previous.find(
+        (item) =>
+          item.cartId !== cartId &&
+          buildCartSignature(item.product, item.selectedOptions, item.notes) === nextSignature,
+      )
+
+      if (mergeTarget) {
+        changeSummary = normalizedNote ? 'merged-with-note' : 'merged-without-note'
+        return previous
+          .map((item) => {
+            if (item.cartId === mergeTarget.cartId) {
+              return {
+                ...item,
+                quantity: item.quantity + target.quantity,
+                totalPrice: (item.quantity + target.quantity) * item.itemPrice,
+              }
+            }
+            if (item.cartId === cartId) return null
+            return item
+          })
+          .filter(Boolean)
+      }
+
+      changeSummary = normalizedNote ? 'updated' : 'removed'
+      return previous.map((item) => (item.cartId === cartId ? { ...item, notes: normalizedNote } : item))
+    })
+
+    setNoteEditorCartId(null)
+
+    if (changeSummary === 'updated') {
       onAction?.('Item note updated.')
+    } else if (changeSummary === 'removed') {
+      onAction?.('Item note removed.')
+    } else if (changeSummary === 'merged-with-note') {
+      onAction?.('Matching cart items were combined after updating the note.')
+    } else if (changeSummary === 'merged-without-note') {
+      onAction?.('Matching cart items were combined after removing the note.')
     }
   }
 
@@ -325,6 +476,35 @@ export function PosScreen({
     setCart([])
     setPlaceError('')
     onAction?.('Draft order cleared.')
+  }
+
+  const clearProductSearch = () => {
+    setSearchQuery('')
+    productSearchInputRef.current?.focus()
+  }
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === 'Escape' && searchQuery.trim()) {
+      event.preventDefault()
+      clearProductSearch()
+      return
+    }
+    if (event.key !== 'Enter') return
+    if (!quickAddProduct) return
+    event.preventDefault()
+    if (quickAddProduct.customizable) {
+      setSelectedProduct(quickAddProduct)
+      return
+    }
+    addToCart(quickAddProduct)
+  }
+
+  const handleSelectOrderType = (nextType) => {
+    setOrderType(nextType)
+    setOrderTypeDropdownOpen(false)
+    if (nextType === 'Take Away') {
+      setTableDropdownOpen(false)
+    }
   }
 
   const openPaymentModal = () => {
@@ -345,11 +525,15 @@ export function PosScreen({
     }
 
     const selectedPaymentMethod = paymentDraft?.paymentMethod ?? paymentMethod
-    const amountReceived = paymentDraft?.amountReceived ?? total
+    const selectedPaymentCurrency = paymentDraft?.paymentCurrency ?? currency
+    const totalInPaymentCurrency = selectedPaymentCurrency === currency
+      ? total
+      : convertCurrency(total, currency, selectedPaymentCurrency, exchangeRate)
+    const amountReceived = paymentDraft?.amountReceived ?? totalInPaymentCurrency
     const changeAmount = paymentDraft?.changeAmount ?? 0
     const isCashPayment = selectedPaymentMethod === 'Cash'
 
-    if (isCashPayment && amountReceived + 0.000001 < total) {
+    if (isCashPayment && amountReceived + 0.000001 < totalInPaymentCurrency) {
       setPlaceError('Amount received is less than total payment.')
       return false
     }
@@ -362,12 +546,12 @@ export function PosScreen({
       if (onPlaceOrder) {
         result = await onPlaceOrder({
           customerName,
-          tableName,
+          tableName: serviceLabel,
           orderType,
           paymentMethod: selectedPaymentMethod,
           paymentStatus: 'Paid',
           currency,
-          paymentCurrency: currency,
+          paymentCurrency: selectedPaymentCurrency,
           amountReceived,
           changeAmount,
           subtotal,
@@ -422,10 +606,15 @@ export function PosScreen({
             <button onClick={onOpenMenu} className="ui-btn ui-btn-ghost rounded-xl p-2 text-stone-500 xl:hidden">
               <Menu size={19} />
             </button>
-            <HeaderChip icon={CalendarDays} label={formatDate(now)} />
+            <DateChip value={selectedDate} onChange={onDateChange} />
             <HeaderChip icon={Clock3} label={formatTime(now)} />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="hidden items-center gap-2 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-bold text-stone-500 lg:inline-flex">
+              <span>{cartItemCount} items</span>
+              <span className="h-1 w-1 rounded-full bg-stone-300" />
+              <span>{formatMoney(total)}</span>
+            </div>
             <div
               className={`ui-pill px-3 py-1 font-bold ${cart.length > 0 ? 'bg-emerald-50 text-[#1C8370]' : 'bg-red-50 text-[#FC4A4A]'
                 }`}
@@ -546,10 +735,37 @@ export function PosScreen({
                 const nextValue = event.target.value
                 startTransition(() => setSearchQuery(nextValue))
               }}
+              onKeyDown={handleSearchKeyDown}
               placeholder="Search something sweet or strong..."
-              className="ui-input rounded-2xl bg-stone-50/80 py-3 pl-11 pr-4 text-sm font-medium text-stone-700"
+              className="ui-input rounded-2xl bg-stone-50/80 py-3 pl-11 pr-20 text-sm font-medium text-stone-700"
             />
+            {hasSearchQuery && (
+              <button
+                type="button"
+                onClick={clearProductSearch}
+                className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white text-stone-400 shadow-sm ring-1 ring-stone-200 transition-colors hover:text-stone-700"
+              >
+                <X size={15} />
+              </button>
+            )}
           </label>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-stone-500">
+                {resultsLabel}
+              </span>
+              {quickAddProduct && (
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                  Enter adds {quickAddProduct.name}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-stone-400">
+              <span className="rounded-full border border-stone-200 px-3 py-1">Ctrl/Cmd+K Search</span>
+              <span className="rounded-full border border-stone-200 px-3 py-1">Ctrl/Cmd+Enter Checkout</span>
+              <span className="rounded-full border border-stone-200 px-3 py-1">Alt+N Customer</span>
+            </div>
+          </div>
 
           <div className="scrollbar-hide grid min-h-0 flex-1 grid-cols-2 gap-4 overflow-y-auto pr-1 md:grid-cols-3 2xl:grid-cols-4">
             {filteredProducts.map((product) => {
@@ -640,6 +856,24 @@ export function PosScreen({
                 </div>
               )
             })}
+            {filteredProducts.length === 0 && (
+              <div className="col-span-full flex min-h-[220px] flex-col items-center justify-center rounded-[28px] border border-dashed border-stone-200 bg-stone-50/50 px-6 text-center">
+                <Search size={28} className="mb-3 text-stone-300" />
+                <p className="text-sm font-bold text-stone-700">No menu items matched this search.</p>
+                <p className="mt-1 text-xs font-medium text-stone-400">
+                  Try another keyword or clear the current filter.
+                </p>
+                {hasSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={clearProductSearch}
+                    className="ui-btn ui-btn-secondary mt-4 px-4 py-2 text-sm text-stone-600"
+                  >
+                    Clear Search
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -726,6 +960,17 @@ export function PosScreen({
                   <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Order in Progress</p>
                 </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-500 ring-1 ring-stone-200">
+                    {cartItemCount} items
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-500 ring-1 ring-stone-200">
+                    {orderType}
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-stone-500 ring-1 ring-stone-200">
+                    {serviceLabel}
+                  </span>
+                </div>
               </div>
             </div>
             <button
@@ -750,15 +995,19 @@ export function PosScreen({
                 <button
                   type="button"
                   onClick={() => {
+                    if (orderType === 'Take Away') return
                     setTableDropdownOpen((open) => !open)
                     setOrderTypeDropdownOpen(false)
                   }}
-                  className="ui-input inline-flex h-11 w-full cursor-pointer select-none items-center justify-between rounded-2xl border-stone-200 px-4 py-2 text-sm font-bold text-stone-800 focus-visible:border-[#7c4a32] focus-visible:ring-4 focus-visible:ring-amber-900/5"
+                  className={`ui-input inline-flex h-11 w-full select-none items-center justify-between rounded-2xl border-stone-200 px-4 py-2 text-sm font-bold focus-visible:border-[#7c4a32] focus-visible:ring-4 focus-visible:ring-amber-900/5 ${orderType === 'Take Away'
+                    ? 'cursor-not-allowed bg-stone-100 text-stone-400'
+                    : 'cursor-pointer text-stone-800'
+                    }`}
                 >
-                  <span>{tableName}</span>
+                  <span>{serviceLabel}</span>
                   <Menu size={14} className="text-slate-400" />
                 </button>
-                {tableDropdownOpen && (
+                {tableDropdownOpen && orderType !== 'Take Away' && (
                   <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_16px_34px_rgba(0,0,0,0.14)]">
                     {allTables.map((table) => {
                       const isActiveTable = table.label === tableName
@@ -804,8 +1053,7 @@ export function PosScreen({
                           key={option}
                           type="button"
                           onClick={() => {
-                            setOrderType(option)
-                            setOrderTypeDropdownOpen(false)
+                            handleSelectOrderType(option)
                           }}
                           className={`flex w-full cursor-pointer select-none items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${isActiveOption
                             ? 'bg-[#7c4a32]/10 text-[var(--ui-primary)]'
@@ -829,6 +1077,9 @@ export function PosScreen({
             <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-200 text-center">
               <Coffee size={36} className="mb-2 text-stone-200" />
               <p className="text-sm font-medium text-stone-400">No item selected yet.</p>
+              <p className="mt-2 max-w-[220px] text-xs font-medium text-stone-300">
+                Search with `/` or `Ctrl/Cmd+K`, then press Enter to add the first matching item.
+              </p>
             </div>
           )}
           {cart.map((item) => (
@@ -960,7 +1211,7 @@ export function PosScreen({
             disabled={placingOrder || cart.length === 0}
             className="ui-btn ui-btn-primary w-full py-4 text-lg font-black shadow-lg shadow-amber-900/10 disabled:bg-stone-200 disabled:shadow-none transition-all active:scale-[0.98]"
           >
-            {placingOrder ? 'Processing...' : 'Complete Payment'}
+            {placingOrder ? 'Processing...' : `Complete Payment • ${formatMoney(total)}`}
           </button>
         </footer>
       </aside>
@@ -978,7 +1229,7 @@ export function PosScreen({
           }}
           cart={cart}
           customerName={customerName}
-          tableName={tableName}
+          tableName={serviceLabel}
           orderType={orderType}
           subtotal={subtotal}
           tax={tax}
@@ -993,6 +1244,14 @@ export function PosScreen({
               `Order ${receiptData?.orderNumber ?? ''} placed successfully (${receiptData?.paymentMethod ?? paymentMethod}).`,
             )
           }}
+        />
+      )}
+
+      {selectedCartNoteItem && (
+        <CartNoteModal
+          item={selectedCartNoteItem}
+          onClose={() => setNoteEditorCartId(null)}
+          onSave={(nextNote) => handleSaveCartNote(selectedCartNoteItem.cartId, nextNote)}
         />
       )}
 

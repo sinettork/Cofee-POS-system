@@ -26,6 +26,30 @@ function formatCountdown(seconds) {
   return `${minutes}:${remain}`
 }
 
+function roundAmountForCurrency(value, currency) {
+  const safeValue = Math.max(0, Number(value) || 0)
+  return currency === 'KHR' ? Math.round(safeValue) : Number(safeValue.toFixed(2))
+}
+
+function roundUpToStep(value, step, currency) {
+  const safeStep = Number(step)
+  if (!Number.isFinite(safeStep) || safeStep <= 0) {
+    return roundAmountForCurrency(value, currency)
+  }
+  return roundAmountForCurrency(Math.ceil(value / safeStep) * safeStep, currency)
+}
+
+function buildCashShortcutAmounts(amount, currency) {
+  const normalizedAmount = roundAmountForCurrency(amount, currency)
+  const steps = currency === 'KHR' ? [500, 1000, 5000, 10000] : [0.25, 0.5, 1, 5, 10]
+  const suggestions = [normalizedAmount, ...steps.map((step) => roundUpToStep(normalizedAmount, step, currency))]
+
+  return Array.from(new Set(suggestions.map((value) => String(roundAmountForCurrency(value, currency)))))
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value >= normalizedAmount)
+    .slice(0, 4)
+}
+
 export function PaymentModal({
   totalAmount,
   currency = 'USD',
@@ -65,6 +89,7 @@ export function PaymentModal({
   const [paymentCurrency, setPaymentCurrency] = useState(currency)
 
   const cardTimerRef = useRef(null)
+  const amountInputRef = useRef(null)
   const khqrSubmittingRef = useRef(false)
   const khqrAutoAttemptedRef = useRef(false)
   const khqrExpiredByTimerRef = useRef(false)
@@ -81,6 +106,15 @@ export function PaymentModal({
     [],
   )
 
+  useEffect(() => {
+    if (step !== 'cash') return undefined
+    const focusTimer = setTimeout(() => {
+      amountInputRef.current?.focus()
+      amountInputRef.current?.select()
+    }, 0)
+    return () => clearTimeout(focusTimer)
+  }, [paymentCurrency, step])
+
   const isCashPayment = selectedMethod === 'Cash'
   const parsedAmount = Number(amountReceivedInput)
   const isValidReceived = Number.isFinite(parsedAmount) && parsedAmount >= 0
@@ -96,8 +130,25 @@ export function PaymentModal({
   const changeBackAmount = Math.max(0, amountReceived - totalInPaymentCurrency)
 
   const hasAmountInput = String(amountReceivedInput).trim().length > 0
-  const quickCashAdjustments = paymentCurrency === 'KHR' ? [1000, 5000, 10000] : [1, 5, 10]
+  const quickCashAmounts = useMemo(
+    () => buildCashShortcutAmounts(totalInPaymentCurrency, paymentCurrency),
+    [paymentCurrency, totalInPaymentCurrency],
+  )
+  const quickCashSuggestions = quickCashAmounts.slice(1)
   const canChargeCash = !loading && isCashPayment && isValidReceived && amountReceived + 0.000001 >= totalInPaymentCurrency
+  const receiptPaymentCurrency = selectedMethod === 'Cash' ? paymentCurrency : currency
+  const cashProgressTone = !hasAmountInput
+    ? 'text-stone-500'
+    : !isValidReceived || remainingAmount > 0
+      ? 'text-red-500'
+      : 'text-emerald-600'
+  const cashProgressMessage = !hasAmountInput
+    ? `Enter the cash received in ${paymentCurrency}.`
+    : !isValidReceived
+      ? 'Enter a valid amount before completing payment.'
+      : remainingAmount > 0
+        ? `Need ${formatCurrency(remainingAmount, paymentCurrency)} more to complete payment.`
+        : `Ready to charge cash and return ${formatCurrency(changeBackAmount, paymentCurrency)}.`
 
   const submitPayment = useCallback(
     async ({ amountReceived: nextAmountReceived, changeAmount }) => {
@@ -110,6 +161,7 @@ export function PaymentModal({
       try {
         result = await onConfirm?.({
           paymentMethod: selectedMethod,
+          paymentCurrency: receiptPaymentCurrency,
           amountReceived: nextAmountReceived,
           changeAmount,
         })
@@ -139,7 +191,7 @@ export function PaymentModal({
         receiverName: selectedMethod === 'KHQR' ? String(khqrData?.merchantName ?? '') : '',
         receiverAccount: selectedMethod === 'KHQR' ? String(khqrData?.accountId ?? '') : '',
         currency,
-        paymentCurrency,
+        paymentCurrency: receiptPaymentCurrency,
         exchangeRate,
         createdAt: new Date(),
       })
@@ -149,7 +201,6 @@ export function PaymentModal({
     [
       cart,
       currency,
-      paymentCurrency,
       exchangeRate,
       customerName,
       discount,
@@ -163,6 +214,7 @@ export function PaymentModal({
       totalAmount,
       khqrData?.merchantName,
       khqrData?.accountId,
+      receiptPaymentCurrency,
     ],
   )
 
@@ -292,7 +344,7 @@ export function PaymentModal({
   const handleCashCharge = async () => {
     if (loading) return
 
-    if (isCashPayment && (!isValidReceived || amountReceived + 0.000001 < totalAmount)) {
+    if (isCashPayment && (!isValidReceived || amountReceived + 0.000001 < totalInPaymentCurrency)) {
       setFormError('Amount received is less than total payment.')
       return
     }
@@ -303,21 +355,10 @@ export function PaymentModal({
     })
   }
 
-  const applyQuickReceivedAmount = (mode) => {
+  const applyQuickReceivedAmount = (nextAmount) => {
     if (!isCashPayment) return
-
-    if (mode === 'exact') {
-      setAmountReceivedInput(totalInPaymentCurrency.toFixed(paymentCurrency === 'KHR' ? 0 : 2))
-      setFormError('')
-      return
-    }
-
-    const increment = Number(mode)
-    if (!Number.isFinite(increment) || increment <= 0) return
-
-    const current = isValidReceived ? parsedAmount : 0
-    const next = current + increment
-    setAmountReceivedInput(next.toFixed(paymentCurrency === 'KHR' ? 0 : 2))
+    const normalizedAmount = roundAmountForCurrency(nextAmount, paymentCurrency)
+    setAmountReceivedInput(normalizedAmount.toFixed(paymentCurrency === 'KHR' ? 0 : 2))
     setFormError('')
   }
 
@@ -643,8 +684,13 @@ export function PaymentModal({
         <div className="mb-6 rounded-3xl border border-stone-100 bg-stone-50/50 p-6">
           <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Amount due</p>
           <p className="tabular-nums mt-1 text-4xl font-black tracking-tight text-[#7c4a32]">
-            {formatCurrency(totalAmount, currency)}
+            {formatCurrency(totalInPaymentCurrency, paymentCurrency)}
           </p>
+          {paymentCurrency !== currency && (
+            <p className="mt-2 text-xs font-semibold text-stone-500">
+              Order total {formatCurrency(totalAmount, currency)}
+            </p>
+          )}
         </div>
 
         <div className="mb-6 grid grid-cols-3 gap-3">
@@ -679,7 +725,7 @@ export function PaymentModal({
 
         <div className="rounded-3xl border border-stone-100 bg-white p-6 shadow-sm ring-1 ring-stone-100">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Received</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Cash Received</p>
             {selectedMethod === 'Cash' && (
               <div className="flex gap-2">
                 {['USD', 'KHR'].map((curr) => (
@@ -687,7 +733,12 @@ export function PaymentModal({
                     key={curr}
                     onClick={() => {
                       setPaymentCurrency(curr)
-                      setAmountReceivedInput('')
+                      setAmountReceivedInput(
+                        roundAmountForCurrency(
+                          convertCurrency(totalAmount, currency, curr, exchangeRate),
+                          curr,
+                        ).toFixed(curr === 'KHR' ? 0 : 2),
+                      )
                       setFormError('')
                     }}
                     className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors ${paymentCurrency === curr
@@ -702,8 +753,15 @@ export function PaymentModal({
             )}
           </div>
 
+          <p className="mb-4 text-xs font-semibold text-stone-500">
+            {paymentCurrency === currency
+              ? `Collecting in ${paymentCurrency}.`
+              : `Collecting in ${paymentCurrency} for a ${currency} order.`}
+          </p>
+
           <div className="mb-4 flex gap-2">
             <input
+              ref={amountInputRef}
               type="number"
               min={0}
               step={paymentCurrency === 'KHR' ? 1 : 0.01}
@@ -713,11 +771,16 @@ export function PaymentModal({
                 setAmountReceivedInput(event.target.value)
                 setFormError('')
               }}
-              placeholder={`Enter amount...`}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || !canChargeCash) return
+                event.preventDefault()
+                void handleCashCharge()
+              }}
+              placeholder={`Enter amount in ${paymentCurrency}`}
               className="ui-input flex-1 px-4 py-4 text-2xl font-black tabular-nums text-stone-800 bg-stone-50/30"
             />
             <button
-              onClick={() => applyQuickReceivedAmount('exact')}
+              onClick={() => applyQuickReceivedAmount(totalInPaymentCurrency)}
               disabled={!isCashPayment}
               className="ui-btn ui-btn-secondary h-auto rounded-xl px-4 py-4 text-[10px] font-black uppercase tracking-widest text-stone-600 hover:bg-stone-50 whitespace-nowrap"
             >
@@ -725,15 +788,27 @@ export function PaymentModal({
             </button>
           </div>
 
-          {isCashPayment && hasAmountInput && isValidReceived && remainingAmount > 0 && (
-            <p className="mb-4 text-xs font-bold text-red-500">
-              Need {formatCurrency(remainingAmount, paymentCurrency)} more.
-            </p>
-          )}
+          <div className="mb-4 flex flex-wrap gap-2">
+            {quickCashSuggestions.map((suggestedAmount) => {
+              const isActiveShortcut = isValidReceived && Math.abs(parsedAmount - suggestedAmount) < 0.000001
+              return (
+                <button
+                  key={`${paymentCurrency}-${suggestedAmount}`}
+                  type="button"
+                  onClick={() => applyQuickReceivedAmount(suggestedAmount)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+                    isActiveShortcut
+                      ? 'bg-[var(--ui-primary)] text-white'
+                      : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                  }`}
+                >
+                  {formatCurrency(suggestedAmount, paymentCurrency)}
+                </button>
+              )
+            })}
+          </div>
 
-          {!isValidReceived && hasAmountInput && (
-            <p className="mb-6 text-xs font-bold text-red-500">Invalid amount.</p>
-          )}
+          <p className={`mb-4 text-xs font-bold ${cashProgressTone}`}>{cashProgressMessage}</p>
 
           <div className="grid grid-cols-2 gap-0 overflow-hidden rounded-2xl border border-stone-100 bg-stone-50/50">
             <div className="border-r border-stone-100 px-4 py-3">
@@ -773,7 +848,7 @@ export function PaymentModal({
             disabled={!canChargeCash}
             className="ui-btn ui-btn-primary flex-1 py-4 text-lg font-black uppercase tracking-tight shadow-xl shadow-amber-900/10 transition-all active:scale-[0.98]"
           >
-            {loading ? 'Processing...' : 'Charge Cash'}
+            {loading ? 'Processing...' : 'Complete Cash Payment'}
           </button>
         </div>
       </section>
